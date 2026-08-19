@@ -1,9 +1,9 @@
 # OpenWidgetKit
 
-OpenWidgetKitは、Appleプラットフォーム向けに書かれたWidgetのソースを変更せず、
-Windows上でWindows Widgets Providerとして実行するためのSwiftPMパッケージです。
+OpenWidgetKit is a SwiftPM package for running widget source written for Apple
+platforms as a Windows Widgets Provider without changing the application source.
 
-目標となる利用コードは次の形です。
+The target usage has the following form:
 
 ```swift
 import SwiftUI
@@ -22,20 +22,24 @@ struct WeatherWidget: Widget {
 }
 ```
 
-AppleではAppleの`SwiftUI.framework`と`WidgetKit.framework`を使用し、Windowsでは
-このパッケージが同名の`SwiftUI`、`WidgetKit`モジュールを提供します。利用側の
-importやWidget定義にplatform条件を追加しないことが最上位の互換性要件です。
+Apple targets use Apple's `SwiftUI.framework` and `WidgetKit.framework`.
+Windows targets use the modules named `SwiftUI` and `WidgetKit` provided by
+this package. The primary compatibility requirement is that consumers do not
+add platform conditionals to their imports or widget definitions.
 
 ## Status
 
-現在は**基礎runtime実装段階**です。初期iOS 14/macOS 11相当のtimeline値/provider surface
-（entry relevanceを含む）、
-`TimelineProviderContext`の基礎、host非依存のtimeline validationをsourceとして実装しました。
-Windows Provider、provider completion ownership、scheduler、SwiftUI View DSL、Adaptive Cards変換は
-まだ実装していません。各source targetの`FIXME(INCOMPLETE_IMPLEMENTATION)`が残る範囲を明示します。
+The package is currently at the foundational runtime stage. It implements the
+initial iOS 14 and macOS 11 timeline value and provider surface, including entry
+relevance, the basic `TimelineProviderContext`, and host-independent timeline
+validation. The Windows Provider, provider completion ownership, scheduler,
+SwiftUI View DSL, and Adaptive Cards conversion are not implemented. Each source
+target uses `FIXME(INCOMPLETE_IMPLEMENTATION)` to identify its incomplete surface.
 
-構造やimportが存在することを実装完了の根拠にしてはいけません。実装状況と完了条件は
-[IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md)を参照してください。
+Package structure or import availability must not be treated as evidence of
+implementation completion. See
+[IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) for the current state
+and completion criteria.
 
 ```mermaid
 flowchart LR
@@ -47,13 +51,13 @@ flowchart LR
 
 ## Documents
 
-| 文書 | 責務 |
+| Document | Responsibility |
 |---|---|
-| [REQUIREMENTS.md](REQUIREMENTS.md) | 実装が満たすべき機能要件・品質要件・受入条件 |
-| [SPECIFICATION.md](SPECIFICATION.md) | module、runtime、IR、timeline、host連携の規範仕様 |
-| [DESIGN.md](DESIGN.md) | 責務境界、設計判断、代替案、CoreFoundation内の位置付け |
-| [WINDOWS_NOTES.md](WINDOWS_NOTES.md) | COM、MSIX、Adaptive Cards、callback lifetimeなどWindows固有の注意点 |
-| [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | 未実装API、milestone、検証証拠の台帳 |
+| [REQUIREMENTS.md](REQUIREMENTS.md) | Functional requirements, quality requirements, and acceptance criteria |
+| [SPECIFICATION.md](SPECIFICATION.md) | Normative module, runtime, IR, timeline, and host integration specification |
+| [DESIGN.md](DESIGN.md) | Responsibility boundaries, design decisions, alternatives, and position within the CoreFoundation workspace |
+| [WINDOWS_NOTES.md](WINDOWS_NOTES.md) | Windows-specific constraints for COM, MSIX, Adaptive Cards, callback lifetime, and related APIs |
+| [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | Ledger of unimplemented APIs, milestones, and verification evidence |
 
 ## Package boundary
 
@@ -80,14 +84,14 @@ flowchart TD
     Host --> Compiler
 ```
 
-公開productは`SwiftUI`と`WidgetKit`の二つです。package名と公開module名は意図的に
-異なります。`OpenWidgetRuntime`は両moduleの内部契約を共有するためのtargetであり、
-公開productにはしません。
+The two public products are `SwiftUI` and `WidgetKit`. The package name and
+public module names intentionally differ. `OpenWidgetRuntime` shares internal
+contracts between the two modules and is not exposed as a public product.
 
 ## Intended integration
 
-依存productはWindows targetでだけ有効にします。WindowsとWebはPackage Traitではなく
-platformとして選択します。
+The package products should be enabled only for Windows targets. Windows and
+Web are selected as platforms, not as Package Traits.
 
 ```swift
 .target(
@@ -107,73 +111,85 @@ platformとして選択します。
 )
 ```
 
-Apple targetはこのpackage productへ依存せず、system frameworkを解決します。WebAssembly
-backendを将来追加する場合も`.wasi`と実在するJavaScript host capabilityで選択し、
-`Windows`や`Web`というtraitでplatform identityを表現しません。
+Apple targets do not depend on these package products and resolve the system
+frameworks instead. A future WebAssembly backend must likewise be selected by
+`.wasi` and an actual JavaScript host capability. Platform identity must not be
+represented through traits named `Windows` or `Web`.
 
 ## Foundation policy
 
-OpenWidgetKitは`OpenFoundation`をFoundation取り扱いの共通境界として使用します。Windowsでは
-OpenFoundationがSwift toolchain組み込み`Foundation`を再公開するため、公式Foundationの型identityと
-実装をそのまま使用します。`swift-foundation`をSwiftPM dependencyとして追加せず、compiler、
-`Foundation`、`FoundationEssentials`、`FoundationInternationalization`、runtime libraryを同一の
-固定toolchainから取得します。
+OpenWidgetKit uses `OpenFoundation` as the shared boundary for
+Foundation-compatible APIs. On Windows, OpenFoundation re-exports the
+Foundation module supplied by the Swift toolchain, preserving the official
+Foundation type identities and implementations. The package does not add
+`swift-foundation` as a separate SwiftPM dependency. The compiler, `Foundation`,
+`FoundationEssentials`, `FoundationInternationalization`, and runtime libraries
+must come from the same pinned toolchain.
 
-`Date`、`CGFloat`、`CGPoint`、`CGSize`、`CGRect`はFoundationが提供する型をそのまま使用し、
-OpenWidgetKit内では再定義しません。既存OpenCoreGraphicsも非Embedded targetではFoundationの
-geometry型をOpenFoundation経由で使用するため、Windows上では同じ型identityを共有します。
+`Date`, `CGFloat`, `CGPoint`, `CGSize`, and `CGRect` use the types supplied by
+Foundation and are not redeclared in OpenWidgetKit. OpenCoreGraphics also uses
+the non-Embedded Foundation geometry types through OpenFoundation, so Windows
+consumers share the same type identities.
 
-Embedded SwiftではOpenFoundationがFoundation moduleをimport/linkせず、必要最小限のportable値だけを
-提供します。`FoundationEssentials`へ差し替える設計ではありません。`SwiftUI`、`WidgetKit`、
-`OpenWidgetRuntime`は`Foundation`または`FoundationEssentials`を直接選択しません。
+On Embedded Swift, OpenFoundation does not import or link the Foundation module
+and instead supplies only its minimum portable value subset. This is not a
+substitution with `FoundationEssentials`. The `SwiftUI`, `WidgetKit`, and
+`OpenWidgetRuntime` targets do not select `Foundation` or
+`FoundationEssentials` directly.
 
-OpenFoundationはCFCG値identityを所有します。Windowsではtoolchain Foundationの宣言を使用し、
-Embeddedでは同じmoduleがportable宣言を提供します。OpenWidgetKitは値型のためにOpenCoreGraphicsや
-rendererを依存へ追加しません。将来rasterizationを選ぶbackendだけがOpenCoreGraphicsへ依存します。
+OpenFoundation owns CFCG value identity. Windows uses the declarations from
+toolchain Foundation, while Embedded uses portable declarations from the same
+OpenFoundation module. OpenWidgetKit does not depend on OpenCoreGraphics or a
+renderer merely to access value types. Only a future backend that selects
+rasterization should depend on OpenCoreGraphics.
 
 ## Scope
 
-最初のproduction milestoneは次の範囲です。
+The first production milestone includes:
 
 - `StaticConfiguration`;
-- `TimelineEntry`、`TimelineProvider`、`Timeline`、`TimelineReloadPolicy`;
-- `WidgetFamily`と`TimelineProviderContext`;
-- `WidgetCenter`のtimeline reload;
-- Widgetに必要な限定的なSwiftUI View DSL;
-- Windows Widgets用Adaptive Cards template/data生成;
-- packaged Win32 Providerとしての登録、更新、action、停止。
+- `TimelineEntry`, `TimelineProvider`, `Timeline`, and `TimelineReloadPolicy`;
+- `WidgetFamily` and `TimelineProviderContext`;
+- timeline reload through `WidgetCenter`;
+- the limited SwiftUI View DSL required by widgets;
+- Adaptive Cards template and data generation for Windows Widgets;
+- registration, updates, actions, and shutdown as a packaged Win32 Provider.
 
-次の項目は最初のmilestoneに含みません。
+The first milestone does not include:
 
-- 一般アプリケーション向けの完全なSwiftUI実装;
-- UIKit、AppKit、`UIResponder`、`NSResponder`;
-- Live Activities、Control Widgets、watch complication;
-- 全SwiftUI view/modifierの見た目の完全一致;
-- OpenCoreAnimationを用いたframe animation;
-- remote HTMLを必須とするWeb Widget backend。
+- a complete general-purpose SwiftUI implementation;
+- UIKit, AppKit, `UIResponder`, or `NSResponder`;
+- Live Activities, Control Widgets, or watch complications;
+- complete visual parity for every SwiftUI view and modifier;
+- frame animation through OpenCoreAnimation;
+- a Web Widget backend that requires remote HTML.
 
 ## Authoritative references
 
-Apple側の責務境界は、2026-08-19に`remark`で確認した以下の文書と、インストール済み
-MacOSX 27.0 SDKのSwift interfaceを基準にしています。
+The Apple-side responsibility boundaries are based on the following documents,
+reviewed with `remark` on 2026-08-19, and on the Swift interfaces from the
+installed macOS 27.0 SDK:
 
 - [SwiftUI Widget](https://developer.apple.com/documentation/swiftui/widget)
 - [WidgetKit StaticConfiguration](https://developer.apple.com/documentation/widgetkit/staticconfiguration)
 - [WidgetKit TimelineProvider](https://developer.apple.com/documentation/widgetkit/timelineprovider)
 - [Creating a widget extension](https://developer.apple.com/documentation/widgetkit/creating-a-widget-extension)
 
-Windows側はMicrosoftの現行Widget Provider契約を基準にします。
+The Windows side follows Microsoft's current Widget Provider contracts:
 
 - [Widget providers](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/widget-providers)
 - [Implement a widget provider in a Win32 app](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/implement-widget-provider-win32)
 - [Create a widget template](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/widgets-create-a-template)
 - [Widget provider manifest](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/widget-provider-manifest)
 
-Swift Foundationの配布・module境界はSwift公式の次の文書を基準にします。
+The distribution and module boundaries of Swift Foundation follow these
+official Swift references:
 
 - [swift-foundation](https://github.com/swiftlang/swift-foundation)
 - [Foundation distributions](https://github.com/swiftlang/swift-foundation/blob/main/Distributions.md)
 - [Swift 6 Foundation](https://www.swift.org/blog/announcing-swift-6/)
 
-実装開始時にはWindows App SDK、Swift toolchain、Windows SDKの正確なbaselineを固定し、
-文書の日付ではなくそのversionのheader、metadata、runtime behaviorを確認します。
+Before implementation begins, the exact Windows App SDK, Swift toolchain, and
+Windows SDK baseline must be pinned. Headers, metadata, and runtime behavior
+must be checked against those exact versions rather than inferred from document
+publication dates.
