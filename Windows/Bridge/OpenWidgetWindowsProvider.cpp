@@ -543,7 +543,7 @@ private:
 std::mutex module_state_mutex;
 std::weak_ptr<BridgeState> module_state;
 
-struct WidgetProvider final :
+struct WidgetProvider :
     winrt::implements<WidgetProvider, providers::IWidgetProvider> {
     explicit WidgetProvider(std::shared_ptr<BridgeState> state)
         : state_(std::move(state)) {}
@@ -626,7 +626,7 @@ private:
     std::shared_ptr<BridgeState> state_;
 };
 
-struct ProviderFactory final :
+struct ProviderFactory :
     winrt::implements<ProviderFactory, IClassFactory, winrt::no_module_lock> {
     explicit ProviderFactory(std::shared_ptr<BridgeState> state)
         : state_(std::move(state)) {}
