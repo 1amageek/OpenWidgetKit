@@ -404,15 +404,18 @@ try {
         "build", "-c", "release", "--triple", $SwiftTriple,
         "--product", "OpenWidgetWindowsProviderFixture"
     )
-    $SwiftExecutable = Get-ChildItem -Path (Join-Path $RepositoryRoot ".build") `
-        -Filter "OpenWidgetWindowsProviderFixture.exe" -File -Recurse |
-        Where-Object { $_.FullName -match 'release' } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-    if (-not $SwiftExecutable) {
-        throw "The Swift provider executable was not produced."
+    $SwiftBinPath = (& swift build -c release --triple $SwiftTriple `
+        --show-bin-path | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $SwiftBinPath) {
+        throw "SwiftPM did not report the $SwiftTriple release product directory."
     }
-    Copy-Item $SwiftExecutable.FullName $StagingDirectory
+    $SwiftExecutable = Join-Path `
+        $SwiftBinPath `
+        "OpenWidgetWindowsProviderFixture.exe"
+    if (-not (Test-Path $SwiftExecutable -PathType Leaf)) {
+        throw "The Swift provider executable was not produced at '$SwiftExecutable'."
+    }
+    Copy-Item $SwiftExecutable $StagingDirectory
 
     Invoke-Checked msbuild @(
         $BridgeProject,
@@ -510,13 +513,13 @@ try {
     }
     Assert-PEMachine `
         -Files @(
-            $SwiftExecutable.FullName,
+            $SwiftExecutable,
             (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")
         ) `
         -TargetArchitecture $Architecture
     Assert-RuntimeDependencyClosure `
         -EntryPoints @(
-            $SwiftExecutable.FullName,
+            $SwiftExecutable,
             (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")
         ) `
         -RuntimeFiles $RuntimeFiles
