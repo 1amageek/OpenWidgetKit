@@ -4,6 +4,8 @@ Set-StrictMode -Version Latest
 $ExpectedSwiftVersion = "6.4-dev"
 $ExpectedTarget = "x86_64-unknown-windows-msvc"
 $ExpectedSnapshot = "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a"
+$ExpectedCompilerCommit = "db4e13695491982c8de74c36c5efb75bbc715987"
+$ExpectedInstallerSHA256 = "C287DD533A65A73D657B1B9F2305BE50552F89B46199A0F6162A287DEE547149"
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
@@ -18,6 +20,12 @@ try {
     }
     if (-not $SwiftVersion.Contains($ExpectedTarget)) {
         throw "Expected target $ExpectedTarget. Actual: $SwiftVersion"
+    }
+    if (-not $SwiftVersion.Contains($ExpectedCompilerCommit.Substring(0, 16))) {
+        throw "Unexpected Swift compiler commit. Actual: $SwiftVersion"
+    }
+    if ($env:M1_SWIFT_INSTALLER_SHA256 -ne $ExpectedInstallerSHA256) {
+        throw "The verified installer SHA-256 was not propagated to the M1 gate."
     }
 
     $TargetInfo = & swift -print-target-info | ConvertFrom-Json
@@ -98,16 +106,18 @@ try {
     }
 
     $SearchRoots = @(
+        $env:SDKROOT
         $TargetInfo.paths.runtimeLibraryPaths
         $TargetInfo.paths.runtimeLibraryImportPaths
         $TargetInfo.paths.runtimeResourcePath
     ) | Where-Object { $_ } | Sort-Object -Unique
 
-    $FoundationArtifacts = foreach ($Path in $SearchRoots) {
+    $FoundationArtifacts = @(foreach ($Path in $SearchRoots) {
         if (Test-Path $Path) {
             Get-ChildItem -Path $Path -Recurse -File |
                 Where-Object {
                     $_.Name -match '^Foundation(?:Essentials|Internationalization)?\.dll$' -or
+                    $_.Name -match '^Foundation(?:Essentials|Internationalization)?\.swift(?:module|interface|doc|sourceinfo)$' -or
                     $_.FullName -match '[\\/]Foundation(?:Essentials|Internationalization)?\.swiftmodule[\\/]'
                 } |
                 ForEach-Object {
@@ -117,22 +127,47 @@ try {
                     }
                 }
         }
-    }
+    } | Sort-Object Path -Unique)
 
     if (-not $FoundationArtifacts) {
         throw "No Foundation runtime or module artifacts were found in the pinned toolchain."
     }
+    foreach ($RequiredDLL in @(
+        "Foundation.dll",
+        "FoundationEssentials.dll",
+        "FoundationInternationalization.dll"
+    )) {
+        if (-not ($FoundationArtifacts | Where-Object { $_.Path -like "*$RequiredDLL" })) {
+            throw "The pinned distribution does not contain $RequiredDLL."
+        }
+    }
+    $FoundationModuleArtifacts = @(
+        $FoundationArtifacts | Where-Object {
+            $_.Path -match '\.swift(?:module|interface|doc|sourceinfo)$' -or
+            $_.Path -match '[\\/]Foundation(?:Essentials|Internationalization)?\.swiftmodule[\\/]'
+        }
+    )
+    if (-not $FoundationModuleArtifacts) {
+        throw "No Foundation module artifacts were found in the pinned Windows SDK."
+    }
 
     $Evidence = [PSCustomObject]@{
         Snapshot = $ExpectedSnapshot
+        CompilerTag = $TargetInfo.swiftCompilerTag
+        CompilerCommit = $ExpectedCompilerCommit
+        InstallerSHA256 = $env:M1_SWIFT_INSTALLER_SHA256
         SwiftVersion = $SwiftVersion
         Target = $TargetInfo.target
+        SDKRoot = $env:SDKROOT
         RunnerImage = $env:ImageOS
         RunnerImageVersion = $env:ImageVersion
+        GitHubRepository = $env:GITHUB_REPOSITORY
+        GitHubRunID = $env:GITHUB_RUN_ID
+        GitHubHeadSHA = $env:GITHUB_SHA
         BehaviorOutput = $BehaviorOutput
         NegativeConformanceDiagnostic = $ExpectedNegativeDiagnostic
         SearchRoots = $SearchRoots
-        FoundationArtifacts = $FoundationArtifacts | Sort-Object Path -Unique
+        FoundationArtifacts = $FoundationArtifacts
     }
 
     $Evidence | ConvertTo-Json -Depth 8
