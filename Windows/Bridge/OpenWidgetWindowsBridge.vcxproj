@@ -49,6 +49,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(OpenWidgetWindowsAppSDKVersion)" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Widgets" Version="$(OpenWidgetWidgetsPackageVersion)" />
+    <PackageReference Include="Microsoft.Windows.CppWinRT" Version="$(OpenWidgetCppWinRTVersion)" PrivateAssets="all" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

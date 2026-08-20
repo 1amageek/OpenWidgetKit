@@ -127,7 +127,7 @@ flowchart LR
     Config --> Manifest["AppxManifest generator"]
 ```
 
-Schema 2の`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
+Schema 3の`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
 Bundled resourceはpackage-relative `path`だけを保存し、`ms-appx:///` URIはresolverがそのpathから
 導出します。WindowsがURIをpercent-decodeした後に別のpathへ正規化しないよう、resource pathは
 ASCIIのunreserved文字と`/`だけに制限します。

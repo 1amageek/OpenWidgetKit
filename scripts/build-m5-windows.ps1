@@ -292,6 +292,7 @@ try {
         "/p:Platform=$MSBuildPlatform",
         "/p:OpenWidgetWindowsAppSDKVersion=$($Configuration.build.windowsAppSDKVersion)",
         "/p:OpenWidgetWidgetsPackageVersion=$($Configuration.build.widgetsPackageVersion)",
+        "/p:OpenWidgetCppWinRTVersion=$($Configuration.build.cppWinRTVersion)",
         "/p:OpenWidgetVisualCToolset=$($Configuration.build.visualCToolset)",
         "/p:OpenWidgetWindowsSDKVersion=$($Configuration.build.windowsSDKVersion)",
         "/p:OutDir=$BridgeOutput\",
@@ -308,7 +309,8 @@ try {
     $Assets = Get-Content -Raw $AssetsFile.FullName | ConvertFrom-Json -AsHashtable
     foreach ($ExpectedPackage in @(
         "Microsoft.WindowsAppSDK/$($Configuration.build.windowsAppSDKVersion)",
-        "Microsoft.WindowsAppSDK.Widgets/$($Configuration.build.widgetsPackageVersion)"
+        "Microsoft.WindowsAppSDK.Widgets/$($Configuration.build.widgetsPackageVersion)",
+        "Microsoft.Windows.CppWinRT/$($Configuration.build.cppWinRTVersion)"
     )) {
         if (-not $Assets.libraries.ContainsKey($ExpectedPackage)) {
             throw "NuGet resolved an unexpected Windows App SDK graph; missing $ExpectedPackage."
@@ -327,6 +329,10 @@ try {
         @{
             Path = Join-Path $NuGetRoot "microsoft.windowsappsdk.widgets\$($Configuration.build.widgetsPackageVersion)\microsoft.windowsappsdk.widgets.$($Configuration.build.widgetsPackageVersion).nupkg"
             SHA256 = "7F1B585EF8F012784D2CB91B86E809814CECCAB74183A5979EF45DB141779CB5"
+        },
+        @{
+            Path = Join-Path $NuGetRoot "microsoft.windows.cppwinrt\$($Configuration.build.cppWinRTVersion)\microsoft.windows.cppwinrt.$($Configuration.build.cppWinRTVersion).nupkg"
+            SHA256 = "A99ECA1C244DD730B31554E6D4850E685F40BFB7CB0BD1CFB1561169FC3B692B"
         }
     )
     foreach ($Package in $PinnedPackages) {
@@ -407,6 +413,7 @@ try {
         SwiftToolchainIdentifier = $Configuration.build.swiftToolchainIdentifier
         WindowsAppSDKVersion = $Configuration.build.windowsAppSDKVersion
         WidgetsPackageVersion = $Configuration.build.widgetsPackageVersion
+        CppWinRTVersion = $Configuration.build.cppWinRTVersion
         VisualCToolset = $Configuration.build.visualCToolset
         WindowsSDKVersion = $Configuration.build.windowsSDKVersion
         FoundationLinkMode = $Configuration.build.foundationLinkMode

@@ -44,7 +44,7 @@ package struct OpenWidgetProviderConfiguration: Codable, Equatable, Sendable {
     }
 
     package func validateMetadata() throws {
-        guard schemaVersion == 2 else {
+        guard schemaVersion == 3 else {
             throw WindowsWidgetHostError.invalidConfiguration(
                 "Unsupported provider configuration schema '\(schemaVersion)'."
             )
@@ -168,6 +168,7 @@ package struct WindowsWidgetBuildConfiguration: Codable, Equatable, Sendable {
     package let swiftToolchainIdentifier: String
     package let windowsAppSDKVersion: String
     package let widgetsPackageVersion: String
+    package let cppWinRTVersion: String
     package let visualCToolset: String
     package let windowsSDKVersion: String
     package let foundationLinkMode: String
@@ -181,6 +182,7 @@ package struct WindowsWidgetBuildConfiguration: Codable, Equatable, Sendable {
         }
         guard Self.isDottedVersion(windowsAppSDKVersion, componentCount: 3),
               Self.isDottedVersion(widgetsPackageVersion, componentCount: 3),
+              Self.isDottedVersion(cppWinRTVersion, componentCount: 4),
               Self.isDottedVersion(windowsSDKVersion, componentCount: 4) else {
             throw WindowsWidgetHostError.invalidConfiguration(
                 "Windows SDK and NuGet pins must use fixed numeric versions."
@@ -443,8 +445,8 @@ private enum OpenWidgetConfigurationKeyValidator {
             root["build"],
             allowed: [
                 "swiftSnapshot", "swiftToolchainIdentifier", "windowsAppSDKVersion",
-                "widgetsPackageVersion", "visualCToolset", "windowsSDKVersion",
-                "foundationLinkMode"
+                "widgetsPackageVersion", "cppWinRTVersion", "visualCToolset",
+                "windowsSDKVersion", "foundationLinkMode"
             ],
             path: "$.build"
         )
