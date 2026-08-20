@@ -5,6 +5,7 @@ $ExpectedSwiftVersion = "6.4-dev"
 $ExpectedTarget = "x86_64-unknown-windows-msvc"
 $ExpectedSnapshot = "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a"
 $ExpectedCompilerCommit = "db4e13695491982c8de74c36c5efb75bbc715987"
+$ExpectedCompilerDisplayCommit = "db4e13695491982"
 $ExpectedInstallerSHA256 = "C287DD533A65A73D657B1B9F2305BE50552F89B46199A0F6162A287DEE547149"
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 
@@ -21,7 +22,7 @@ try {
     if (-not $SwiftVersion.Contains($ExpectedTarget)) {
         throw "Expected target $ExpectedTarget. Actual: $SwiftVersion"
     }
-    if (-not $SwiftVersion.Contains($ExpectedCompilerCommit.Substring(0, 16))) {
+    if (-not $SwiftVersion.Contains($ExpectedCompilerDisplayCommit)) {
         throw "Unexpected Swift compiler commit. Actual: $SwiftVersion"
     }
     if ($env:M1_SWIFT_INSTALLER_SHA256 -ne $ExpectedInstallerSHA256) {
