@@ -127,7 +127,7 @@ flowchart LR
     Config --> Manifest["AppxManifest generator"]
 ```
 
-Schema 4の`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
+Schema 5の`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
 M5のSwift executableがpackaged appのownerであり、C++/WinRT bridge DLLはself-contained appではありません。
 生成manifestは`Microsoft.WindowsAppRuntime.2` version 2.3.1.0以上を明示的に要求し、Widgets DLLを含む
 framework packageはWindows package graphが解決します。
@@ -232,6 +232,13 @@ JSON/resource bufferだけをowner、byte count、release callback付きで渡�
 OpenWidgetKitは`FoundationEssentials`を直接採用しません。full Windowsでは同じProvider processが
 公開SwiftUI/WidgetKitのためにFoundation umbrellaを必要とし、EmbeddedではOpenFoundationが
 Foundation familyを完全に外すためです。
+
+Windows配布では、host runtime directoryやSDK全体から同名DLLを探索しません。Swift Windows
+toolchainはhost architectureのruntimeだけを通常配置し、cross-target runtimeはSDK同梱の
+redistributable merge moduleを正本にするためです。M5は固定installerに含まれる
+`rtl.dynamic.private.amd64.msm`または`rtl.dynamic.private.arm64.msm`をWiXで行政展開し、
+private-assembly layoutをそのままMSIXへ含めます。全PEのmachine、Foundation必須DLL、最終
+dependency closure、merge moduleとWiX SDKのhashをarchitectureごとに検証します。
 
 ## Rendering strategy
 

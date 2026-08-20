@@ -47,7 +47,14 @@ jobs:
               throw "Swift installer SHA-256 mismatch: $ActualSHA256"
           }
           $Process = Start-Process -FilePath $Installer `
-              -ArgumentList "/quiet", "/norestart" -Wait -PassThru
+              -ArgumentList @(
+                  "/quiet",
+                  "/norestart",
+                  "OptionsInstallWindowsSDKAMD64=1",
+                  "OptionsInstallWindowsSDKARM64=1",
+                  "OptionsInstallWindowsRedistPrivateAMD64=1",
+                  "OptionsInstallWindowsRedistPrivateARM64=1"
+              ) -Wait -PassThru
           if ($Process.ExitCode -notin @(0, 3010)) {
               throw "Swift installer failed with exit code $($Process.ExitCode)."
           }

@@ -254,7 +254,12 @@ function Expand-SwiftRuntimeRedistributable {
             -Filter $MergeModuleName -File -Recurse -ErrorAction SilentlyContinue
     )
     if ($MergeModules.Count -ne 1) {
-        throw "Expected one '$MergeModuleName' in the pinned Swift redistributables; found $($MergeModules.Count)."
+        $AvailableMergeModules = @(
+            Get-ChildItem -Path $SwiftInstallDirectory.FullName `
+                -Filter "*.msm" -File -Recurse -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.FullName }
+        ) -join "; "
+        throw "Expected one '$MergeModuleName' in '$RedistributablesDirectory'; found $($MergeModules.Count). Available merge modules: $AvailableMergeModules"
     }
     $MergeModule = $MergeModules[0]
 

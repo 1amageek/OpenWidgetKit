@@ -208,10 +208,13 @@ Windows Providerは`OpenFoundation`をimport境界として使用し、OpenFound
 `Date`、`CGFloat`、`CGPoint`、`CGSize`、`CGRect`を共有します。Foundation structをC ABIへ
 直接渡さず、bridge境界ではowned byte bufferと明示的なscalarだけを使用します。
 
-MSIXへ含めるSwift/Foundation runtime libraryは、Providerをcompile/linkしたtoolchainから取得します。
-別releaseまたは別snapshotの`Foundation`、`FoundationEssentials`、
-`FoundationInternationalization`、Swift runtime DLLを混在させません。必要なDLLは推測した固定listを
-コピーするのではなく、固定toolchainと最終executableのdependencyから決定します。
+MSIXへ含めるSwift/Foundation runtime libraryは、Providerをcompile/linkしたtoolchainの公式
+`rtl.dynamic.private` redistributable merge moduleから取得します。Windows Swift installerが通常配置する
+runtimeはhost architectureだけなので、SDK全体から同名DLLを再帰検索してcross-target payloadを選びません。
+x64は`rtl.dynamic.private.amd64.msm`、ARM64は`rtl.dynamic.private.arm64.msm`を使用し、WiXによる
+administrative imageのprivate-assembly layoutを保持します。別release、別snapshot、別architectureの
+`Foundation`、`FoundationEssentials`、`FoundationInternationalization`、Swift runtime DLLを混在させません。
+最終executableとbridgeから辿るSwift/Foundation dependency closureがmerge module内で閉じることも検証します。
 
 Windows Providerでは`FoundationEssentials`を直接選択しません。Embedded deploymentの軽量化は
 OpenFoundationがFoundation familyを完全に外す別分岐で扱い、Windows Providerへ混在させません。
@@ -226,11 +229,12 @@ M5 source baselineは次の通りです。
 | Windows App SDK | `2.3.1` |
 | Widgets NuGet package | `2.0.5` |
 | C++/WinRT NuGet package | `2.0.230706.1` |
+| WiX Toolset SDK | `7.0.0` |
 | Adaptive Cards host template | `1.6` |
 | Visual C++ toolset | `v145` |
 | Windows SDK | `10.0.26100.0` |
 | architectures | `x64`, `arm64` |
-| Foundation link mode | dynamic, discovered from final executable |
+| Foundation link mode | dynamic, official private redistributable merge module |
 
 Swift Provider executableがpackaged appを所有します。C++/WinRT bridge DLLへ
 `WindowsAppSDKSelfContained`を適用せず、生成manifestが

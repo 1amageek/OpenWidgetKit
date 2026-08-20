@@ -224,9 +224,9 @@ as a typed unsupported action rather than ignored.
 ## M5: Windows host bridge and packaging
 
 - [x] Pin Swift/Windows SDK/Windows App SDK/C++ toolset versions in provider configuration
-- [x] Record dynamic Foundation/runtime link mode and collect the actual runtime graph
-- [x] Package only Foundation/runtime libraries found from the compiler toolchain and final executable
-- [x] Reject mixed Foundation/runtime DLL hashes during packaging validation
+- [x] Record dynamic Foundation/runtime link mode and pin the WiX packaging SDK
+- [x] Package the target architecture's official Swift private redistributable merge module
+- [x] Reject architecture drift and incomplete Swift/Foundation dependency closure during packaging
 - [x] Define narrow C ABI
 - [x] Implement all six C++/WinRT `IWidgetProvider` callbacks
 - [x] Copy callback values within callback scope

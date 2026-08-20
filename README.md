@@ -230,11 +230,13 @@ official Swift references:
 - [Swift 6 Foundation](https://www.swift.org/blog/announcing-swift-6/)
 
 The M5 source pins Windows App SDK 2.3.1, Widgets package 2.0.5, C++/WinRT
-2.0.230706.1, Visual C++ v145, Windows SDK 10.0.26100.0, and the currently
-verified Windows Swift 6.4 development snapshot from 2026-08-14. The packaging
-gate verifies exact NuGet hashes and discovers Swift/Foundation DLLs from the
-final executable and that same toolchain; it rejects mixed copies rather than
-using an unrelated fixed DLL directory.
+2.0.230706.1, WiX Toolset SDK 7.0.0, Visual C++ v145, Windows SDK 10.0.26100.0,
+and the currently verified Windows Swift 6.4 development snapshot from
+2026-08-14. The packaging gate verifies exact NuGet hashes and obtains each
+target architecture's Swift/Foundation payload from the pinned toolchain's
+official `rtl.dynamic.private` redistributable merge module. It preserves the
+private-assembly layout, checks every PE machine, and proves the Swift runtime
+dependency closure instead of searching across host and cross-target SDK trees.
 
 The Swift provider executable owns the packaged application. The C++/WinRT
 bridge remains a class library, and the generated manifest declares a
@@ -245,8 +247,9 @@ MSIX.
 ## Windows provider build gate
 
 `scripts/build-m5-windows.ps1` builds an unsigned x64 or ARM64 provider package.
-It validates the toolchain, NuGet graph, package configuration, runtime DLL
-origins, generated manifest, and MSIX contents. The workflow runs this script on
+It validates the toolchain, NuGet graph, package configuration, official Swift
+redistributable and WiX provenance, generated manifest, and expanded MSIX
+contents. The workflow runs this script on
 the explicit `windows-2025-vs2026` image for both architectures. Signing,
 installation, gallery discovery, pinning, and visual behavior belong to M6 and
 are intentionally not reported by this build gate.
