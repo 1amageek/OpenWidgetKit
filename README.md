@@ -57,6 +57,7 @@ flowchart LR
 | [SPECIFICATION.md](SPECIFICATION.md) | Normative module, runtime, IR, timeline, and host integration specification |
 | [DESIGN.md](DESIGN.md) | Responsibility boundaries, design decisions, alternatives, and position within the CoreFoundation workspace |
 | [WINDOWS_NOTES.md](WINDOWS_NOTES.md) | Windows-specific constraints for COM, MSIX, Adaptive Cards, callback lifetime, and related APIs |
+| [API_COMPATIBILITY.md](API_COMPATIBILITY.md) | Pinned M1 Apple API inventory, compatibility differences, fixtures, and Windows compile baseline |
 | [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | Ledger of unimplemented APIs, milestones, and verification evidence |
 
 ## Package boundary

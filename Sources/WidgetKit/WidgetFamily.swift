@@ -1,7 +1,20 @@
+@available(iOS 14.0, macOS 11.0, watchOS 9.0, visionOS 26.0, *)
+@available(tvOS, unavailable)
 @preconcurrency
 public enum WidgetFamily: Int, CustomDebugStringConvertible, CustomStringConvertible, Sendable {
+    @available(iOS 14.0, macOS 11.0, visionOS 26.0, *)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
     case systemSmall
+
+    @available(iOS 14.0, macOS 11.0, visionOS 26.0, *)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
     case systemMedium
+
+    @available(iOS 14.0, macOS 11.0, visionOS 26.0, *)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
     case systemLarge
 
     public var debugDescription: String { description }
@@ -17,3 +30,7 @@ public enum WidgetFamily: Int, CustomDebugStringConvertible, CustomStringConvert
         }
     }
 }
+
+@available(iOS 14.0, macOS 11.0, watchOS 9.0, visionOS 26.0, *)
+@available(tvOS, unavailable)
+extension WidgetFamily: Hashable {}

@@ -39,6 +39,16 @@ let package = Package(
                 .product(name: "OpenFoundation", package: "OpenFoundation")
             ]
         ),
+        .target(
+            name: "OpenWidgetKitAPIFixture",
+            dependencies: ["SwiftUI", "WidgetKit"],
+            path: "Fixtures/SharedAPI"
+        ),
+        .executableTarget(
+            name: "OpenWidgetKitBehaviorFixture",
+            dependencies: ["WidgetKit"],
+            path: "Fixtures/BehaviorAPI"
+        ),
         .testTarget(
             name: "OpenWidgetRuntimeTests",
             dependencies: [

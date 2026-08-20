@@ -8,6 +8,7 @@
 | requirements | Documented | `REQUIREMENTS.md` |
 | runtime specification | Documented | `SPECIFICATION.md` |
 | architecture decisions | Documented | `DESIGN.md` |
+| M1 API baseline | Apple/local verified; Windows execution pending | `API_COMPATIBILITY.md` and `scripts/verify-m1-api.sh` |
 | Windows constraints | Documented | `WINDOWS_NOTES.md` |
 | Foundation/geometry ownership | Implemented and verified except Windows | OpenFoundation owns the canonical CFCG boundary and re-exports toolchain Foundation on full Swift |
 | public SwiftUI API | Foundation slice only | `EnvironmentValues` substrate; View/Widget surface remains incomplete |
@@ -30,9 +31,10 @@ WidgetKit Timeline<Entry>
 
 Source behavior tests cover accepted timelines, empty timelines, nonfinite dates,
 out-of-order entries, reload dates, entry relevance, public value storage, canonical CFCG values, and the Apple-compatible
-`EnvironmentVariants` key-path subscript call shape. All 12 Native tests passed on 2026-08-20, the initial timeline
-surface typechecked against Apple system Foundation/SwiftUI/WidgetKit, and the normal WASM target built with the pinned
-Swift 6.4 snapshot. Windows compilation and real Widgets Board behavior remain unverified.
+`EnvironmentVariants` key-path subscript call shape. All 12 Native tests passed on 2026-08-20, the initial API fixtures
+typechecked against the pinned macOS 11, iOS 14, watchOS 9, and visionOS 26 system modules, Apple and replacement
+behavior output matched, and the normal WASM API, behavior, and OpenCoreGraphics identity fixtures built with the pinned Swift 6.4 snapshot.
+Windows compilation and real Widgets Board behavior remain unverified.
 
 ## Milestone dependency graph
 
@@ -77,10 +79,9 @@ Widgets Board exercises successful and failed lifecycle paths.
 - [x] Document toolchain Foundation and geometry ownership
 - [x] Add the OpenFoundation package dependency and re-export source boundary
 - [x] Mark callable implementation as incomplete
-- [ ] Initialize a Git repository
-- [ ] Select remote repository and release policy
+- [x] Initialize a Git repository
+- [x] Select the `1amageek/OpenWidgetKit` remote repository; release policy remains milestone-gated
 
-Git initialization and remote creation are intentionally not performed by the package skeleton task.
 OpenFoundation wiring is verified on Native and normal WASM. Windows compile/link verification is pending.
 OpenWidgetKit does not advertise Embedded Swift support: its current Apple-compatible surface contains `Codable`,
 which the pinned Embedded Swift mode does not provide.
@@ -91,31 +92,33 @@ No public declaration may be added before its inventory row is complete.
 
 | Family | SDK signature | Apple compile fixture | Availability/isolation | Status |
 |---|---|---|---|---|
-| `Widget` | reviewed, fixture not stored | missing | reviewed | planned |
-| `WidgetConfiguration` | reviewed, fixture not stored | missing | reviewed | planned |
-| `WidgetBundle` | partially reviewed | missing | incomplete | planned |
-| `StaticConfiguration` | reviewed, fixture not stored | missing | reviewed | planned |
-| `TimelineEntry` | reviewed for initial date/relevance surface | replacement tests and Apple compile fixture pass | initial baseline reviewed | initial slice verified on Native/WASM |
-| `TimelineProvider` | reviewed against SDK interface | replacement conformance test and Apple call-shape fixture pass | callback `@Sendable` reviewed | initial slice verified on Native/WASM |
-| `TimelineProviderContext` | reviewed against SDK interface | replacement geometry/key-path tests and Apple compile fixture pass | initial properties reviewed | initial slice verified on Native/WASM |
-| `Timeline` | reviewed against SDK interface | replacement behavior tests and Apple compile fixture pass | reviewed | initial slice verified on Native/WASM |
-| `TimelineReloadPolicy` | reviewed against SDK interface | replacement behavior tests pass; Apple fixture missing | reviewed | initial slice verified on Native/WASM |
-| `WidgetFamily` | reviewed for initial small/medium/large surface | replacement behavior test passes; Apple fixture missing | initial baseline reviewed | initial slice verified on Native/WASM |
-| `WidgetCenter` | reviewed, fixture not stored | missing | reviewed | planned |
+| `Widget` | pinned SDK declaration recorded | canonical Apple static-widget fixture passes | `@MainActor @preconcurrency`; exact baseline recorded | inventory complete; implementation M2/M3 |
+| `WidgetConfiguration` | pinned SDK declaration and graph requirement recorded | exercised by both canonical Apple fixtures | `@MainActor @preconcurrency`; opaque body recorded | inventory complete; implementation M2/M3 |
+| `WidgetBundle` | pinned SDK declaration recorded | canonical Apple bundle fixture passes | builder and `@MainActor @preconcurrency` recorded | inventory complete; implementation M3 |
+| `StaticConfiguration` | generic initializer and opaque body recorded | canonical Apple static-widget and bundle fixtures pass | `@MainActor @preconcurrency`; current `Sendable` conformance recorded | inventory complete; implementation M2/M3 |
+| `TimelineEntry` | exact initial date/relevance surface recorded | shared Apple/replacement fixture and behavior tests pass | exact initial availability applied | initial slice locally verified |
+| `TimelineProvider` | exact initial generic and callback surface recorded | shared Apple/replacement fixture and conformance test pass | callback `@preconcurrency`/`@Sendable` recorded | declaration locally verified; ownership M3 |
+| `TimelineProviderContext` | exact initial properties and key-path subscripts recorded | Apple/replacement geometry and key-path fixtures pass | exact initial availability applied | initial value slice locally verified |
+| `Timeline` | exact generic constraint, storage, and initializer recorded | shared Apple/replacement fixture and behavior tests pass | exact initial availability applied | initial slice locally verified |
+| `TimelineReloadPolicy` | exact `Equatable`-only surface recorded | positive behavior and Apple/replacement negative-conformance fixtures pass | exact initial availability applied | initial slice locally verified |
+| `WidgetFamily` | exact conformances and first three cases recorded | shared Apple/replacement fixture and behavior test pass | type and case availability applied | initial slice locally verified |
+| `WidgetCenter` | exact initial singleton/query/reload surface recorded | Apple compile fixture passes | callback `@preconcurrency`/`@Sendable` recorded | inventory complete; implementation M3 |
 
 Required work:
 
-- [ ] Pin an exact Apple SDK/Xcode baseline
-- [ ] Store extracted public interface fixtures permitted by licensing/policy
-- [ ] Create Apple compile fixtures for canonical widget sources
-- [ ] Record generic constraints and opaque return behavior
-- [ ] Record actor isolation and `@Sendable` completion behavior
-- [ ] Define initial availability baseline
-- [ ] Define explicit out-of-scope API families
-- [ ] Pin the exact Windows Foundation module/runtime baseline with the Swift toolchain
-- [ ] Add Apple/Windows compile fixtures using `Date`, `CGFloat`, `CGSize`, and `CGRect`
-- [ ] Verify non-Embedded OpenCoreGraphics values cross the OpenWidgetKit API without conversion
+- [x] Pin the exact Apple SDK/Xcode/compiler/interface-hash baseline
+- [x] Store normalized public signature inventory without copying complete SDK interfaces
+- [x] Create Apple compile fixtures for canonical widget and widget-bundle sources
+- [x] Record generic constraints and opaque return behavior
+- [x] Record actor isolation and `@Sendable` completion behavior
+- [x] Define the initial availability baseline
+- [x] Define explicit out-of-scope API families
+- [x] Pin the exact Windows Swift installer and Foundation/runtime distribution baseline
+- [x] Add one shared Apple/replacement compile fixture using `Date`, `CGFloat`, `CGPoint`, `CGSize`, and `CGRect`
+- [x] Verify non-Embedded OpenCoreGraphics values cross the OpenWidgetKit API without conversion on macOS and normal WASM
 - [x] Verify the intended Foundation re-export and public-import surface on Native and normal WASM; Windows remains pending
+- [x] Add a dispatch-only Windows workflow pinned to the Swift installer SHA-256, action commits, and sibling-package commits
+- [ ] Run `scripts/verify-m1-windows.ps1` on the pinned x86_64 Windows toolchain and record installed Foundation artifact hashes
 
 ## M2: Widget-scoped SwiftUI and semantic document
 
@@ -231,7 +234,7 @@ unadvertised until a later milestone defines their semantics.
 - App Intents-compatible interaction;
 - Web/WASI host adapter;
 - remote HTML Widget backend;
-- diagnostics and developer preview tooling。
+- diagnostics and developer preview tooling.
 
 ## Completion evidence policy
 
@@ -243,7 +246,7 @@ Every completed row must link to or name evidence for:
 4. failed behavior test;
 5. applicable concurrency/lifetime test;
 6. target compile/link evidence;
-7. real host evidence when a platform adapter is involved。
+7. real host evidence when a platform adapter is involved.
 
 Before removing any `FIXME(INCOMPLETE_IMPLEMENTATION)` marker, update this document in the same change.
 An unsupported API must remain undeclared or return an explicit typed failure according to its public contract;

@@ -1,0 +1,99 @@
+name: M1 Windows API Verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-m1-windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out OpenWidgetKit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: CoreFoundation/OpenWidgetKit
+
+      - name: Check out OpenFoundation
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: 1amageek/OpenFoundation
+          ref: 97e5aa8993133de9a253ce92ceeacc37cead3e73
+          path: CoreFoundation/OpenFoundation
+
+      - name: Check out OpenCoreGraphics
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: 1amageek/OpenCoreGraphics
+          ref: bf9c4bab8d48cb940602c52c0567e62cb4f44e70
+          path: CoreFoundation/OpenCoreGraphics
+
+      - name: Check out swift-webgpu
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: 1amageek/swift-webgpu
+          ref: 4242a88e96ca811cccbc54d4e82564461cd4524a
+          path: CoreFoundation/swift-webgpu
+
+      - name: Install Python 3.10
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.10"
+
+      - name: Install the pinned Swift snapshot
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Uri = "https://download.swift.org/swift-6.4.x-branch/windows10/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a-windows10.exe"
+          $ExpectedSHA256 = "C287DD533A65A73D657B1B9F2305BE50552F89B46199A0F6162A287DEE547149"
+          $Installer = Join-Path $env:RUNNER_TEMP "swift-6.4-snapshot.exe"
+
+          Invoke-WebRequest -Uri $Uri -OutFile $Installer
+          $ActualSHA256 = (Get-FileHash -Algorithm SHA256 -Path $Installer).Hash
+          if ($ActualSHA256 -ne $ExpectedSHA256) {
+              throw "Swift installer SHA-256 mismatch: $ActualSHA256"
+          }
+
+          $Process = Start-Process `
+              -FilePath $Installer `
+              -ArgumentList "/quiet", "/norestart" `
+              -Wait `
+              -PassThru
+          if ($Process.ExitCode -notin @(0, 3010)) {
+              throw "Swift installer failed with exit code $($Process.ExitCode)."
+          }
+
+          $SearchRoots = @(
+              (Join-Path $env:LOCALAPPDATA "Programs\Swift"),
+              (Join-Path $env:ProgramFiles "Swift")
+          ) | Where-Object { Test-Path $_ }
+          $SwiftExecutable = foreach ($Root in $SearchRoots) {
+              Get-ChildItem -Path $Root -Recurse -Filter swift.exe -File |
+                  Where-Object { $_.FullName -match '[\\/]usr[\\/]bin[\\/]swift\.exe$' }
+          }
+          $SwiftExecutable = $SwiftExecutable | Select-Object -First 1
+          if (-not $SwiftExecutable) {
+              throw "The installed swift.exe was not found."
+          }
+
+          $SwiftBin = $SwiftExecutable.DirectoryName
+          $env:Path = "$SwiftBin;$env:Path"
+          $SwiftBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $SwiftExecutable.FullName --version
+
+      - name: Verify M1 on Windows
+        shell: pwsh
+        working-directory: CoreFoundation/OpenWidgetKit
+        run: |
+          ./scripts/verify-m1-windows.ps1 |
+              Tee-Object -FilePath m1-windows-evidence.json
+
+      - name: Upload Windows evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m1-windows-evidence
+          path: CoreFoundation/OpenWidgetKit/m1-windows-evidence.json
+          if-no-files-found: error
