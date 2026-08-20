@@ -2,7 +2,7 @@
 
 ## Purpose
 
-この文書はOpenWidgetKitのWindows adapter実装時に見落としやすい制約をまとめます。
+この文書はOpenWidgetKitのWindows adapter実装と検証で見落としやすい制約をまとめます。
 Microsoft documentationは更新されるため、実装時には固定したWindows App SDK versionの
 metadata/header/sampleと実Widgets Boardで再確認してください。
 
@@ -17,7 +17,9 @@ Packaged provider process
 
 現行の一般Widget Providerはpackaged Win32 appまたはPWAとして登録します。Win32 pathでは
 out-of-process COM local serverが`IWidgetProvider`を実装します。Swiftだけで直接WinRTの
-所有権とclass factoryを扱う前提にせず、薄いC++/WinRT bridgeを置きます。
+所有権とclass factoryを扱う前提にせず、薄いC++/WinRT bridgeを置きます。M5 sourceでは
+bridgeをSwift executableへ静的に混ぜず、`OpenWidgetWindowsBridge.dll`として狭いC ABIから
+動的にloadします。
 
 ## IWidgetProvider callbacks
 
@@ -89,7 +91,7 @@ Windows Widgets UIはAdaptive Cards templateとdata JSONで表現します。
 - Widgets Boardが対応するschema/versionだけを使用する;
 - generic Adaptive Cardsで使えるelementがWidget hostでも使えるとは仮定しない;
 - interactive actionはWidget hostが対応する`Action.Execute`へ限定して開始する;
-- `host.widgetSize`はsmall/medium/largeを取る;
+- `$host.widgetSize`はsmall/medium/largeを取る;
 - light/dark themeとheader/customization capabilityをhost dataから判断する;
 - malformed JSONやunsupported elementをhost fallbackへ任せて成功扱いしない;
 - templateとdataを分離し、更新量を小さくする。
@@ -133,9 +135,9 @@ manifestでは次のdriftが特に危険です。
 | executable path mismatch | COM server start failure |
 | missing asset/resource | gallery registration/display failure |
 
-同じmetadataを手作業で二重管理しない設計が必要です。候補は、deterministicなmanifest source fileを
-single source of truthにしてruntime registryとmanifestを生成する方法です。Widget bodyをbuild時に
-任意実行してmetadataを抽出する方式はI/O、副作用、cross compilationの問題があるため慎重に扱います。
+M5では`OpenWidgetProvider.json`をsingle source of truthにし、deterministicなmanifest generatorと
+runtime registry validatorが同じ値を消費します。Widget bodyをbuild時に任意実行してmetadataを
+抽出しません。
 
 ## Threading and reentrancy
 
@@ -199,7 +201,20 @@ OpenFoundationがFoundation familyを完全に外す別分岐で扱い、Windows
 
 ## Toolchain baseline checklist
 
-実装開始時に次を固定して記録します。
+M5 source baselineは次の通りです。
+
+| Component | Pin |
+|---|---|
+| Swift Windows | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a` |
+| Windows App SDK | `2.3.1` |
+| Widgets NuGet package | `2.0.5` |
+| Adaptive Cards host template | `1.6` |
+| Visual C++ toolset | `v143` |
+| Windows SDK | `10.0.26100.0` |
+| architectures | `x64`, `arm64` |
+| Foundation link mode | dynamic, discovered from final executable |
+
+baseline更新時に次を固定して記録します。
 
 - Swift Windows toolchain version and compiler commit;
 - Foundation module/runtime library versions and dynamic/static link mode;

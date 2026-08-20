@@ -1,14 +1,22 @@
 import OpenWidgetRuntime
 import SwiftUI
+#if os(Windows)
+import OpenWidgetWindowsRuntime
+#endif
 
 @available(iOS 14.0, macOS 11.0, watchOS 9.0, *)
 @available(tvOS, unavailable)
 extension Widget {
     @MainActor
     @preconcurrency
-    public static func main() {
+    public static func main() async {
         do {
-            try WidgetRuntimeComposition.run(
+#if os(Windows)
+            WidgetRuntimeComposition.installBootstrap(
+                try WindowsWidgetRuntimeBootstrap.defaultBootstrap()
+            )
+#endif
+            try await WidgetRuntimeComposition.run(
                 definitions: lowerWidget(Self.init())
             )
         } catch {
@@ -22,9 +30,14 @@ extension Widget {
 extension WidgetBundle {
     @MainActor
     @preconcurrency
-    public static func main() {
+    public static func main() async {
         do {
-            try WidgetRuntimeComposition.run(
+#if os(Windows)
+            WidgetRuntimeComposition.installBootstrap(
+                try WindowsWidgetRuntimeBootstrap.defaultBootstrap()
+            )
+#endif
+            try await WidgetRuntimeComposition.run(
                 definitions: lowerWidgetBundle(Self.init())
             )
         } catch {

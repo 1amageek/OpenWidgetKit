@@ -1,4 +1,4 @@
 @MainActor
 package protocol WidgetRuntimeBootstrap: AnyObject, Sendable {
-    func run(registry: RuntimeWidgetRegistry) throws
+    func run(registry: RuntimeWidgetRegistry) async throws
 }

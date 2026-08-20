@@ -29,19 +29,26 @@ add platform conditionals to their imports or widget definitions.
 
 ## Status
 
-M2 and the host-neutral portion of M3 are implemented in source. The package now
+M2 through M5 are implemented in source. The package now
 contains the widget-scoped SwiftUI view subset, immutable semantic documents,
 `Widget` and `StaticConfiguration` lowering, one-shot provider completion
 ownership, an immutable registry, generation-safe timeline scheduling, and
-`WidgetCenter` control routing. Focused Native behavior tests and the normal WASM
-build exercise these paths. The same M2/M3 source fixture also typechecks against
-the pinned Apple SwiftUI, SwiftUICore, and WidgetKit interfaces.
+`WidgetCenter` control routing. M4 adds deterministic Adaptive Cards 1.6
+template/data compilation, light/dark and family conditions, typed unsupported
+failures, resource resolution, structural SHA-256 identities, and a bounded
+template cache. M5 adds the narrow C ABI, dynamically loaded C++/WinRT
+`IWidgetProvider`, COM class factory lifecycle, Swift-owned async entry point,
+generation-safe `WidgetManager` updates, a single provider configuration, and
+deterministic MSIX manifest tooling.
 
-This is not yet a usable Windows Widget Provider. Adaptive Cards compilation is
-M4, and the concrete C++/WinRT host, production bootstrap, and MSIX packaging are
-M5. The previously verified Windows M1 baseline does not establish that the new
-M2/M3 implementation builds or runs on Windows; that target revalidation remains
-pending.
+The M4 compiler passes 10 focused Native tests and builds for normal WASM with
+the pinned Swift 6.4 snapshot and matching SDK. The M5 Swift host and manifest
+surface passes 5 focused Native tests. These checks do not compile or execute
+the C++/WinRT provider. The previously verified Windows M1 baseline therefore
+does not prove the new provider, x64/ARM64 link, unsigned MSIX, or Widgets Board
+behavior. The checked-in `M5 Windows Provider Build` workflow is the target
+build gate; M6 remains the signed install and real Widgets Board acceptance
+milestone.
 
 Package structure or import availability must not be treated as evidence of
 implementation completion. See
@@ -52,8 +59,9 @@ and completion criteria.
 flowchart LR
     Provider["TimelineProvider"] --> Document["SwiftUI semantic document<br/>M2 implemented"]
     Document --> Scheduler["Generation-safe timeline runtime<br/>M3 implemented"]
-    Scheduler --> Compiler["Adaptive Cards compiler<br/>M4 pending"]
-    Compiler --> Windows["Windows host and packaging<br/>M5 pending"]
+    Scheduler --> Compiler["Adaptive Cards compiler<br/>M4 Native/WASM verified"]
+    Compiler --> Windows["Windows host and packaging<br/>M5 Native tests pass; Windows pending"]
+    Windows --> Board["Widgets Board E2E<br/>M6 pending"]
 ```
 
 ## Documents
@@ -77,8 +85,8 @@ flowchart TD
     WidgetKit["WidgetKit product<br/>Configuration and Timeline"]
     Foundation["OpenFoundation<br/>shared Foundation boundary"]
     Runtime["OpenWidgetRuntime<br/>package-internal"]
-    Compiler["Adaptive Cards compiler<br/>planned"]
-    Host["Windows widget host adapter<br/>planned"]
+    Compiler["OpenWidgetAdaptiveCards<br/>package-internal"]
+    Host["OpenWidgetWindowsRuntime<br/>package-internal"]
 
     App --> SwiftUI
     App --> WidgetKit
@@ -198,7 +206,18 @@ official Swift references:
 - [Foundation distributions](https://github.com/swiftlang/swift-foundation/blob/main/Distributions.md)
 - [Swift 6 Foundation](https://www.swift.org/blog/announcing-swift-6/)
 
-Before implementation begins, the exact Windows App SDK, Swift toolchain, and
-Windows SDK baseline must be pinned. Headers, metadata, and runtime behavior
-must be checked against those exact versions rather than inferred from document
-publication dates.
+The M5 source pins Windows App SDK 2.3.1, Widgets package 2.0.5, Visual C++ v143,
+Windows SDK 10.0.26100.0, and the currently verified Windows Swift 6.4
+development snapshot from 2026-08-01. The packaging gate verifies exact NuGet
+hashes and discovers Swift/Foundation DLLs from the final executable and that
+same toolchain; it rejects mixed copies rather than using an unrelated fixed DLL
+directory.
+
+## Windows provider build gate
+
+`scripts/build-m5-windows.ps1` builds an unsigned x64 or ARM64 provider package.
+It validates the toolchain, NuGet graph, package configuration, runtime DLL
+origins, generated manifest, and MSIX contents. The workflow runs this script on
+`windows-2025` for both architectures. Signing, installation, gallery discovery,
+pinning, and visual behavior belong to M6 and are intentionally not reported by
+this build gate.

@@ -39,6 +39,10 @@ struct ConfigurationRuntimeTests {
         #expect(timeline.entries.count == 1)
         #expect(timeline.reloadPolicy == .never)
         #expect(entry.document.environment.family == .systemMedium)
+        #expect(entry.document.environment.colorScheme == .light)
+        #expect(entry.additionalDocuments.count == 1)
+        #expect(entry.additionalDocuments[0].environment.colorScheme == .dark)
+        #expect(entry.additionalDocuments[0].environment.family == .systemMedium)
         #expect(textValues(in: entry.document.root) == ["value-7"])
     }
 
@@ -136,22 +140,22 @@ struct ConfigurationRuntimeTests {
     }
 
     @Test
-    func compositionBootstrapReceivesTheLoweredImmutableRegistry() throws {
+    func compositionBootstrapReceivesTheLoweredImmutableRegistry() async throws {
         let bootstrap = RecordingBootstrap()
         WidgetRuntimeComposition.installBootstrap(bootstrap)
         defer { WidgetRuntimeComposition.uninstall() }
         let definitions = try lowerWidgetBundle(TestBundle())
 
-        try WidgetRuntimeComposition.run(definitions: definitions)
+        try await WidgetRuntimeComposition.run(definitions: definitions)
 
         #expect(bootstrap.kinds == ["first", "second"])
     }
 
     @Test
-    func missingBootstrapAndUnsupportedConfigurationFailExplicitly() {
+    func missingBootstrapAndUnsupportedConfigurationFailExplicitly() async {
         WidgetRuntimeComposition.uninstall()
-        #expect(throws: WidgetRuntimeError.hostUnavailable) {
-            try WidgetRuntimeComposition.run(definitions: [])
+        await #expect(throws: WidgetRuntimeError.hostUnavailable) {
+            try await WidgetRuntimeComposition.run(definitions: [])
         }
         #expect(
             throws: WidgetRuntimeError.unsupportedWidgetConfiguration(
@@ -200,6 +204,9 @@ struct ConfigurationRuntimeTests {
             isPreview: false,
             displaySize: CGSize(width: 160, height: 160),
             environment: WidgetEnvironmentSnapshot(),
+            additionalEnvironments: [
+                WidgetEnvironmentSnapshot(colorScheme: .dark)
+            ],
             identityStore: WidgetIdentityStore()
         )
     }
@@ -433,7 +440,7 @@ private final class RecordingControl: WidgetRuntimeControl, Sendable {
 private final class RecordingBootstrap: WidgetRuntimeBootstrap, Sendable {
     private(set) var kinds: [String] = []
 
-    func run(registry: RuntimeWidgetRegistry) {
+    func run(registry: RuntimeWidgetRegistry) async {
         kinds = registry.definitions.map(\.kind)
     }
 }

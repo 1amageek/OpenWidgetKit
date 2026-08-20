@@ -1,0 +1,116 @@
+name: M5 Windows Provider Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-provider:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
+
+    steps:
+      - name: Check out OpenWidgetKit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: CoreFoundation/OpenWidgetKit
+
+      - name: Check out OpenFoundation
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: 1amageek/OpenFoundation
+          ref: 97e5aa8993133de9a253ce92ceeacc37cead3e73
+          path: CoreFoundation/OpenFoundation
+
+      - name: Install Python 3.10
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.10"
+
+      - name: Install the pinned Swift snapshot
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Snapshot = "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a"
+          $Uri = "https://download.swift.org/swift-6.4.x-branch/windows10/$Snapshot/$Snapshot-windows10.exe"
+          $ExpectedSHA256 = "C287DD533A65A73D657B1B9F2305BE50552F89B46199A0F6162A287DEE547149"
+          $Installer = Join-Path $env:RUNNER_TEMP "swift-6.4-snapshot.exe"
+          Invoke-WebRequest -Uri $Uri -OutFile $Installer
+          $ActualSHA256 = (Get-FileHash -Algorithm SHA256 -Path $Installer).Hash
+          if ($ActualSHA256 -ne $ExpectedSHA256) {
+              throw "Swift installer SHA-256 mismatch: $ActualSHA256"
+          }
+          $Process = Start-Process -FilePath $Installer `
+              -ArgumentList "/quiet", "/norestart" -Wait -PassThru
+          if ($Process.ExitCode -notin @(0, 3010)) {
+              throw "Swift installer failed with exit code $($Process.ExitCode)."
+          }
+          $PathEntries = @(
+              $env:Path
+              [Environment]::GetEnvironmentVariable("Path", "Machine")
+              [Environment]::GetEnvironmentVariable("Path", "User")
+          ) -split ";" | Where-Object { $_ } | Select-Object -Unique
+          $env:Path = $PathEntries -join ";"
+          $PathEntries | Out-File `
+              -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          foreach ($Name in "SDKROOT", "SWIFT_TOOLCHAIN_ROOT") {
+              $Value = [Environment]::GetEnvironmentVariable($Name, "User")
+              if (-not $Value) {
+                  $Value = [Environment]::GetEnvironmentVariable($Name, "Machine")
+              }
+              if ($Value) {
+                  Set-Item -Path "Env:$Name" -Value $Value
+                  "$Name=$Value" | Out-File `
+                      -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              }
+          }
+          $SwiftExecutable = Get-Command swift.exe -ErrorAction Stop
+          $env:OPENWIDGET_SWIFT_SNAPSHOT = $Snapshot
+          $env:OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER = $Snapshot
+          "OPENWIDGET_SWIFT_SNAPSHOT=$Snapshot" | Out-File `
+              -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER=$Snapshot" | Out-File `
+              -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $SwiftExecutable.FullName --version
+
+      - name: Compile M4 and M5 Swift tests
+        shell: pwsh
+        working-directory: CoreFoundation/OpenWidgetKit
+        run: |
+          $ErrorActionPreference = "Stop"
+          & swift build --build-tests
+          if ($LASTEXITCODE -ne 0) {
+              throw "The M4/M5 Swift test targets failed to compile."
+          }
+
+      - name: Build the unsigned provider package
+        shell: pwsh
+        working-directory: CoreFoundation/OpenWidgetKit
+        run: |
+          $ErrorActionPreference = "Stop"
+          $VsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $VsInstall = & $VsWhere -latest -products * `
+              -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+              -property installationPath
+          if (-not $VsInstall) { throw "Visual Studio C++ tools were not found." }
+          Import-Module (Join-Path $VsInstall "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+          Enter-VsDevShell -VsInstallPath $VsInstall -SkipAutomaticLocation `
+              -DevCmdArguments "-arch=x64 -host_arch=x64"
+          ./scripts/build-m5-windows.ps1 `
+              -Architecture "${{ matrix.architecture }}" `
+              -OutputDirectory (Join-Path $env:RUNNER_TEMP "m5-${{ matrix.architecture }}")
+
+      - name: Upload unsigned MSIX and build evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: m5-windows-${{ matrix.architecture }}
+          path: |
+            ${{ runner.temp }}/m5-${{ matrix.architecture }}/OpenWidgetKit-${{ matrix.architecture }}.msix
+            ${{ runner.temp }}/m5-${{ matrix.architecture }}/m5-build-evidence.json
+          if-no-files-found: error

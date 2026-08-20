@@ -51,6 +51,14 @@ surface. The declarations below normalize SDK qualification such as
 and are `@MainActor @preconcurrency`. Swift owns the process entry point in the
 planned Windows provider architecture.
 
+The replacement entry-point extensions are intentionally `async`, while the
+Apple SDK declarations are synchronous. This is a documented Windows
+portability difference: the MainActor must suspend while the C++/WinRT local
+server waits, otherwise timeline content evaluation would deadlock behind a
+blocking synchronous `main()`. Consumer syntax remains `@main struct ...:
+Widget`; code that explicitly takes or invokes the static `main` function does
+not have an exact signature match.
+
 ### M2 SwiftUI subset inventory
 
 The following is the deliberately bounded semantic surface. Each declaration
@@ -238,10 +246,11 @@ executes the gate, and uploads the JSON evidence. The workflow is dispatch-only.
 
 As of 2026-08-20, the pinned Apple API fixtures, including the M2/M3 source
 surface, typecheck for macOS 11, iOS 14, watchOS 9, and visionOS 26, and the
-replacement checks pass on the local arm64 macOS host. All 44 focused Native
-behavior tests pass. The normal WASM API fixture also builds with the pinned
-Swift 6.4 snapshot. The Windows evidence below remains the M1 baseline and does
-not yet cover M2/M3.
+replacement checks pass on the local arm64 macOS host. All 44 focused M2/M3
+Native behavior test declarations pass. The 15 M4/M5 host-neutral Native test
+declarations also pass, and the normal WASM API, behavior, and M4 targets build
+with the pinned Swift 6.4 snapshot. The Windows evidence below remains the M1
+baseline and does not yet cover M2-M5.
 
 The pinned Windows gate passed on the `win25-vs2026` x86_64 runner in
 [GitHub Actions run 32320007986](https://github.com/1amageek/OpenWidgetKit/actions/runs/32320007986)

@@ -220,13 +220,21 @@ package actor WidgetRuntimeService {
         guard isCurrent(instanceID: id, generation: generation) else { return }
         instance.task = Task { [self] in
             do {
-                var environment = configuration.environment
-                environment.family = configuration.family
+                var environmentVariants = configuration.environmentVariants
+                for index in environmentVariants.indices {
+                    environmentVariants[index].family = configuration.family
+                }
+                guard let environment = environmentVariants.first else {
+                    throw WidgetRuntimeError.hostRejected(
+                        message: "A widget instance must contain at least one environment variant."
+                    )
+                }
                 let context = RuntimeProviderContext(
                     family: configuration.family,
                     isPreview: configuration.isPreview,
                     displaySize: configuration.displaySize,
                     environment: environment,
+                    additionalEnvironments: Array(environmentVariants.dropFirst()),
                     identityStore: identityStore
                 )
                 let timeline = try await definition.requestTimeline(

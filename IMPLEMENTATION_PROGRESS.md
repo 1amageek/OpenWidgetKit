@@ -14,8 +14,9 @@
 | public SwiftUI API | M2 implemented in source | widget-scoped View DSL, builders, Widget protocols, environment, and semantic lowering |
 | public WidgetKit API | host-neutral M3 implemented in source | static configuration, provider bridge, registry bootstrap, and WidgetCenter routing |
 | runtime behavior | host-neutral M3 implemented | provider ownership, validation, three reload policies, generation fences, cancellation, and shutdown |
-| Windows provider | Not implemented | no bridge or packaging target exists |
-| build/test/runtime verification | M2/M3 Native and normal WASM pass; Windows M2/M3 pending | 44 focused Native tests, Apple system-module fixtures, and normal WASM build; pinned Windows evidence remains M1-only |
+| Adaptive Cards compiler | M4 host-neutral implementation verified on Native and normal WASM | canonical encoder, structural identity/cache, theme/family templates, resources, mappings, typed failures, 10 Native tests, and the normal WASM target build |
+| Windows provider | M5 host-neutral Swift surface verified on Native; Windows target verification pending | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, packaging workflow, and 5 Native host/manifest tests |
+| build/test/runtime verification | M2/M3 Native and normal WASM pass; M4 Native/WASM pass; M5 Native tests pass | 59 focused Native test declarations pass; M4 and shared M2/M3 targets build for normal WASM; the x64/ARM64 workflow and real Windows runtime remain unexecuted |
 
 Import-only success, declaration presence, or Package.swift resolution is not implementation evidence.
 
@@ -28,18 +29,24 @@ Widget / WidgetBundle
             -> immutable WidgetDocument entries
                 -> generation-safe TimelineScheduler
                     -> RuntimeWidgetHost generation fence
-                        -> M4/M5 concrete compiler and host (pending)
+                        -> Adaptive Cards template/data compiler
+                            -> Swift host actor and C ABI generation fence
+                                -> C++/WinRT IWidgetProvider
+                                    -> WidgetManager.UpdateWidget
 ```
 
-The 44 focused Native tests cover the initial timeline values plus semantic
+The 59 focused Native test declarations cover the initial timeline values plus semantic
 lowering, stable identities, resource ownership, invalid values, provider
 completion ownership, timeout/duplicate/late completion, all three scheduler
 policies, non-advancing reload rejection, registry failures, bootstrap routing,
 WidgetCenter routing, generation invalidation, delete during a suspended host
-apply, and shutdown. The M2/M3 shared source fixture typechecks against the
+apply, shutdown, canonical Adaptive Cards success/failure payloads, template
+cache behavior, host generation fences, and deterministic manifest generation.
+The M2/M3 shared source fixture typechecks against the
 pinned Apple SDKs and the replacement, and the replacement fixture builds for
-normal WASM with the pinned Swift 6.4 snapshot. The existing x86_64 Windows gate
-covers M1 only; M2/M3 Windows compile/runtime evidence has not yet been produced.
+normal WASM with the pinned Swift 6.4 snapshot. The M4 target also builds for
+normal WASM. The existing x86_64 Windows gate covers M1 only; M2-M5 Windows
+compile/link/runtime evidence has not yet been produced.
 
 ## Milestone dependency graph
 
@@ -49,8 +56,8 @@ flowchart LR
     M1["M1 Apple API fixtures<br/>complete"]
     M2["M2 SwiftUI subset and IR<br/>source + Native/WASM verified"]
     M3["M3 Timeline runtime<br/>source + Native/WASM verified"]
-    M4["M4 Adaptive Cards compiler<br/>2-3 weeks"]
-    M5["M5 WinRT bridge and MSIX<br/>2-3 weeks"]
+    M4["M4 Adaptive Cards compiler<br/>Native tests + normal WASM build pass"]
+    M5["M5 WinRT bridge and MSIX<br/>Native tests pass; Windows gate pending"]
     M6["M6 Real Board static E2E<br/>1-2 weeks"]
     M7["M7 Interaction<br/>2-4 weeks"]
 
@@ -172,44 +179,52 @@ unadvertised until a later milestone defines their semantics.
 - [x] reload/delete race and suspended-host-apply tests
 - [ ] Re-run the M3 compile and behavior gates on the pinned Windows toolchain
 
-The concrete production bootstrap remains M5. Without an installed host,
-`Widget.main()` reaches the explicitly marked incomplete composition branch and
-fails instead of reporting a placeholder success. Action routing remains M7.
+Windows `Widget.main()` now installs the M5 bootstrap before lowering reaches the
+runtime composition. Other platforms without an injected host still fail with
+`hostUnavailable` instead of reporting placeholder success. Action compilation
+and routing remain M7; an M5 `OnActionInvoked` callback is observed and reported
+as a typed unsupported action rather than ignored.
 
 ## M4: Adaptive Cards compiler
 
-- [ ] canonical JSON encoder contract
-- [ ] `WidgetDocument` validation
-- [ ] structural hash
-- [ ] template/data separation
-- [ ] TextBlock mapping
-- [ ] Image/resource mapping
-- [ ] vertical Container mapping
-- [ ] horizontal ColumnSet mapping
-- [ ] family/theme host conditions
-- [ ] explicit unsupported semantic errors
-- [ ] template cache ownership and eviction
-- [ ] golden success fixtures
-- [ ] malformed/unsupported failure fixtures
+- [x] canonical JSON encoder contract implemented
+- [x] `WidgetDocument` validation implemented
+- [x] stable SHA-256 structural identity implemented
+- [x] template/data separation implemented
+- [x] TextBlock mapping implemented
+- [x] Image/resource mapping implemented for configured `ms-appx:///` assets
+- [x] vertical Container mapping implemented
+- [x] horizontal ColumnSet mapping implemented
+- [x] family/theme host conditions implemented
+- [x] explicit unsupported semantic errors implemented
+- [x] bounded `Mutex`-owned template cache and LRU eviction implemented
+- [x] golden success fixtures added
+- [x] malformed/unsupported failure fixtures added
+- [x] Execute 10 M4 Native tests and record canonical payload evidence in the golden fixtures
+- [x] Build the M4 target for normal WASM with the pinned Swift 6.4 snapshot and matching SDK
+- [ ] validate visual mapping in the real Widgets Board (M6)
 
 ## M5: Windows host bridge and packaging
 
-- [ ] Pin Swift/Windows SDK/Windows App SDK/C++ toolset versions
-- [ ] Record Foundation/runtime library versions and dynamic/static link mode
-- [ ] Package only Foundation/runtime libraries from the compiler toolchain
-- [ ] Reject mixed Foundation module/runtime versions during packaging validation
-- [ ] Define narrow C ABI
-- [ ] Implement C++/WinRT `IWidgetProvider`
-- [ ] Copy callback values within callback scope
-- [ ] Implement COM class factory lifetime
-- [ ] Keep Swift `Widget.main()` as the only process entry point
-- [ ] Implement host update and typed rejection path
-- [ ] Define JSON/resource owner and exactly-once deallocator
-- [ ] Create MSIX packaging project/tooling
-- [ ] Register COM server and Widget Provider extension
-- [ ] Validate CLSID/kind/family/resource metadata
+- [x] Pin Swift/Windows SDK/Windows App SDK/C++ toolset versions in provider configuration
+- [x] Record dynamic Foundation/runtime link mode and collect the actual runtime graph
+- [x] Package only Foundation/runtime libraries found from the compiler toolchain and final executable
+- [x] Reject mixed Foundation/runtime DLL hashes during packaging validation
+- [x] Define narrow C ABI
+- [x] Implement all six C++/WinRT `IWidgetProvider` callbacks
+- [x] Copy callback values within callback scope
+- [x] Implement COM class factory and module-lock shutdown handshake
+- [x] Keep async Swift `Widget.main()` as the only process entry point
+- [x] Implement host update and typed rejection path
+- [x] Define event/result owners and exactly-once release callbacks
+- [x] Create deterministic MSIX manifest and packaging tooling
+- [x] Register COM server and Widget Provider extension from one configuration
+- [x] Validate CLSID/kind/family/resource metadata
+- [x] Add a `windows-2025` x64/ARM64 build workflow
+- [x] Execute 5 Native tests for host generation fences and deterministic manifest generation
 - [ ] Build/link x64
 - [ ] Build/link arm64
+- [ ] inspect expanded MSIX contents and record M5 evidence
 
 ## M6: Real Windows Widgets Board static E2E
 

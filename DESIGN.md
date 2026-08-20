@@ -2,8 +2,10 @@
 
 ## Status
 
-この文書はOpenWidgetKitの規範アーキテクチャです。現在はM2 semantic documentとhost-neutral M3 runtimeまで
-sourceがあり、M4 Adaptive Cards compilerとM5 Windows hostは未実装です。確認済み事実、
+この文書はOpenWidgetKitの規範アーキテクチャです。現在はM2 semantic document、host-neutral M3 runtime、
+M4 Adaptive Cards compiler、M5 Windows host/package sourceまで実装されています。M4はNative testと通常WASM
+target build、M5のhost-neutral Swift surfaceはNative testを通過しました。C++/WinRTのx64/ARM64 build/linkと
+Windows runtime検証は未実行です。確認済み事実、
 目標設計、必要な変更、未解決事項を
 区別して記載します。
 
@@ -109,6 +111,32 @@ flowchart LR
     Package --> Bridge
 ```
 
+実装された依存方向は次です。Windows backendは`WidgetKit`からWindows条件でのみ選択され、
+compilerやhostから公開SwiftUI/WidgetKitへ逆流しません。
+
+```mermaid
+flowchart LR
+    WidgetKit --> Runtime["OpenWidgetRuntime"]
+    WidgetKit -. "Windows only" .-> WindowsRuntime["OpenWidgetWindowsRuntime"]
+    WindowsRuntime --> Compiler["OpenWidgetAdaptiveCards"]
+    WindowsRuntime --> Runtime
+    WindowsRuntime --> Loader["COpenWidgetWindowsBridge"]
+    Loader -. "dynamic ABI" .-> CPP["OpenWidgetWindowsBridge.dll"]
+    CPP --> WinRT["Windows App SDK Widgets"]
+    Config["OpenWidgetProvider.json"] --> WindowsRuntime
+    Config --> Manifest["AppxManifest generator"]
+```
+
+`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
+Widget bodyをbuild時に実行してmanifest metadataを推測しません。runtime開始時にはlowering済みregistryと
+configurationを集合比較し、driftをtyped failureにします。
+
+The Windows replacement uses an async `Widget.main()`/`WidgetBundle.main()`
+entry point. Apple's extension is synchronous, but a synchronous replacement
+would occupy MainActor while the COM server blocks and prevent later timeline
+View evaluation. This is the narrow documented API difference; the consumer's
+`@main` widget declaration is unchanged.
+
 ## Why one package with two public products
 
 初期設計ではOpenSwiftUIとOpenWidgetKitを別packageにする案も考えられます。しかし、
@@ -206,6 +234,27 @@ Foundation familyを完全に外すためです。
 初期backendはMicrosoftが正式に定義するAdaptive Cards template/dataです。text、image、stack、
 basic style、family、actionの意味をnative host elementへmappingします。
 
+M4 sourceで確定したsupport matrixは次です。hostが同じ意味を表現できないmodifierを削除して
+成功扱いせず、`AdaptiveCardCompilationError`にします。
+
+| Semantic input | M4 output/contract |
+|---|---|
+| `Text` | `TextBlock`; valueはdata binding、font role、semantic palette、line limitを保持 |
+| named `Image` | configured `ms-appx:///` URI; system imageとApple bundle identityは明示的unsupported |
+| `VStack` | `Container`; order、horizontal alignment、host spacing tokenを保持 |
+| `HStack` | `ColumnSet`; order、vertical alignment、horizontal `Spacer`を保持 |
+| `Group` | identityを検証してsemantic flattening |
+| `Spacer` / `Divider` | stretch element / separator element |
+| semantic color background | `Container.style`; partial safe-area bleedはunsupported |
+| `padding` | Adaptive Cards 1.6にinner-padding同値契約がないためunsupported |
+| `frame` | SwiftUIのmin/ideal/max constraint全体を保持できないためunsupported |
+| arbitrary RGB/HSB | host paletteで同値にならないためunsupported |
+
+light/darkは同じentryを二つの`EnvironmentValues`で評価し、それぞれ独立したdata namespaceへ
+compileします。familyとthemeは`$host.widgetSize`/`$host.hostTheme`条件で選択します。template cacheは
+canonical template全体をkeyにし、SHA-256は外部identityとして使います。hash collisionで別templateを
+共有しません。
+
 ### Future: rasterized resource
 
 Canvas、Path、複雑なgradientなど、静的画像として意味を保てるものはOpenCoreGraphicsによる
@@ -282,7 +331,28 @@ source contractを示しますが、M2/M3のWindows compile/runtime gateは未�
 | runtime composition | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; verification pending | install/current/uninstall composition functions | uninstall clears both references |
 | view identity map | `WidgetIdentityStore` on `MainActor` | same isolation | same isolation; verification pending | `identifier(for:namespace:)` | released with widget instance |
 | semantic document/resources | immutable `Sendable` values | same values | same values; verification pending | constructed on `MainActor`, read by runtime/host | value lifetime; no external handle |
-| host generation fence | test host uses actor state | protocol contract only | M5 adapter must implement monotonic fence | invalidate/apply/remove | removal permanently rejects stale commits |
+| host generation fence | test host uses actor state | protocol contract only | `WindowsAdaptiveCardHost` actor plus C++ operation fence; target verification pending | invalidate/apply/remove | removal permanently rejects stale commits |
+
+M4/M5で追加したstateはWindows adapter graphへ限定されます。Embedded SwiftはOpenWidgetKitの対応targetでは
+なく、Windows stateをraw storageへ置換する条件分岐もありません。
+
+| M4/M5 logical state | Native test storage/isolation | normal WASM | Embedded WASM | Windows storage/isolation | Read/mutation/release |
+|---|---|---|---|---|---|
+| template cache | `Mutex<CacheState>` | target not selected | unsupported target | same `Mutex<CacheState>` | compiler methods; bounded eviction; compiler lifetime |
+| callback event queue | `Mutex<State>` in focused tests | target not selected | unsupported target | same `Mutex<State>` | enqueue/drain; external actor callback outside lock |
+| provider controller | actor | target not selected | unsupported target | same actor | ordered lifecycle methods; service shutdown then bridge completion |
+| Swift host fence | actor dictionary | target not selected | unsupported target | same actor dictionary | invalidate/apply/remove; bridge I/O actor-ordered |
+| C ABI handle | immutable opaque owner with documented unchecked boundary | target stub rejects use | unsupported target | same owner over C++ state | exactly-once `owk_bridge_close` in deinit |
+| C++ generations/operations | not linked | not linked | not linked | mutex-protected fence plus one operation thread | validation before queue and before `UpdateWidget`; delete barrier; destructor joins |
+
+M5 preserves two commit/lifetime invariants. The Swift callback owner remains
+retained until the dynamically loaded provider is destroyed; shutdown completion
+cannot be signaled until the C++/WinRT module count reaches zero, so no retained
+COM provider can call a released Swift context. Separately, the Swift host actor
+records a structure identity only after `UpdateWidget` succeeds. A later update
+may omit `WidgetUpdateRequestOptions.Template` only when that same instance has
+already accepted the same structure; recovery and structural changes always send
+the full template.
 
 `TimelineProvider.Entry`はApple API上`Sendable`を要求しませんが、completionは`@Sendable`です。この互換境界だけは
 callbackが引き渡した`Timeline<Entry>`を`Any` payloadとしてMutex ownerへ移し、MainActorで一度だけ取り出します。

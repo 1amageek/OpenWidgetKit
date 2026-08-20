@@ -131,16 +131,25 @@ where Provider: TimelineProvider, Content: View {
         context: RuntimeProviderContext
     ) throws -> RuntimeTimeline {
         _ = try timeline.validatedRuntimeValue()
-        var environment = EnvironmentValues(snapshot: context.environment)
-        environment.widgetFamily = context.family
         let entries = try timeline.entries.map { entry in
-            RuntimeTimelineEntry(
-                date: entry.date,
-                document: try makeWidgetDocument(
+            let documents = try context.environmentVariants.map { snapshot in
+                var environment = EnvironmentValues(snapshot: snapshot)
+                environment.widgetFamily = context.family
+                return try makeWidgetDocument(
                     content(entry),
                     environment: environment,
                     identityStore: context.identityStore
                 )
+            }
+            guard let document = documents.first else {
+                throw WidgetRuntimeError.hostRejected(
+                    message: "A provider context must contain at least one environment variant."
+                )
+            }
+            return RuntimeTimelineEntry(
+                date: entry.date,
+                document: document,
+                additionalDocuments: Array(documents.dropFirst())
             )
         }
         return try RuntimeTimeline(
@@ -210,7 +219,9 @@ private extension TimelineProviderContext {
             isPreview: runtimeValue.isPreview,
             displaySize: runtimeValue.displaySize,
             environmentVariants: EnvironmentVariants(
-                values: [EnvironmentValues(snapshot: runtimeValue.environment)]
+                values: runtimeValue.environmentVariants.map(
+                    EnvironmentValues.init(snapshot:)
+                )
             )
         )
     }

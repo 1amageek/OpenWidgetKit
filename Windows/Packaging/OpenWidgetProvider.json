@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "build": {
+    "swiftSnapshot": "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a",
+    "swiftToolchainIdentifier": "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a",
+    "windowsAppSDKVersion": "2.3.1",
+    "widgetsPackageVersion": "2.0.5",
+    "visualCToolset": "v143",
+    "windowsSDKVersion": "10.0.26100.0",
+    "foundationLinkMode": "dynamic"
+  },
+  "provider": {
+    "packageName": "OpenWidgetKit.WindowsFixture",
+    "publisher": "CN=OpenWidgetKit Development",
+    "version": "1.0.0.0",
+    "architecture": "x64",
+    "applicationID": "OpenWidgetProvider",
+    "executable": "OpenWidgetWindowsProviderFixture.exe",
+    "bridgeDLL": "OpenWidgetWindowsBridge.dll",
+    "classID": "{E7B2A965-16F5-49D8-9F30-3541DAA57131}",
+    "extensionID": "OpenWidgetProviderExtension",
+    "displayName": "OpenWidgetKit Provider",
+    "square44Logo": "Assets/Square44Logo.png",
+    "square150Logo": "Assets/Square150Logo.png",
+    "storeLogo": "Assets/StoreLogo.png"
+  },
+  "definitions": [
+    {
+      "kind": "openwidgetkit.windows.fixture",
+      "displayName": "OpenWidgetKit Fixture",
+      "description": "Static Swift WidgetKit provider fixture",
+      "icon": "Assets/WidgetIcon.png",
+      "screenshot": "Assets/WidgetScreenshot.png",
+      "families": [
+        {
+          "name": "small",
+          "displayWidth": 158,
+          "displayHeight": 158,
+          "displayScale": 1
+        },
+        {
+          "name": "medium",
+          "displayWidth": 338,
+          "displayHeight": 158,
+          "displayScale": 1
+        },
+        {
+          "name": "large",
+          "displayWidth": 338,
+          "displayHeight": 354,
+          "displayScale": 1
+        }
+      ]
+    }
+  ],
+  "resources": []
+}

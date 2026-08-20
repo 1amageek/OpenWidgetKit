@@ -116,13 +116,18 @@ struct WidgetDocumentTests {
         )
 
         let node = try #require(document.root.children.first)
-        guard case .background(let alignment, let ignoredEdges) = node.kind else {
+        guard case .background(
+            let alignment,
+            let ignoredEdges,
+            let foregroundCount
+        ) = node.kind else {
             Issue.record("Expected a background node")
             return
         }
         #expect(alignment.horizontal == .center)
         #expect(alignment.vertical == .center)
         #expect(ignoredEdges == [.top, .bottom])
+        #expect(foregroundCount == 1)
         #expect(node.children.count == 2)
     }
 

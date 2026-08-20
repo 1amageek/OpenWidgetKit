@@ -26,7 +26,8 @@ extension BackgroundWidgetView: WidgetNodeConvertible {
                 id: id,
                 kind: .background(
                     alignment: alignment.widgetValue,
-                    ignoredEdges: nil
+                    ignoredEdges: nil,
+                    foregroundCount: foregroundNodes.count
                 ),
                 children: foregroundNodes + backgroundNodes
             )
@@ -65,7 +66,8 @@ extension BackgroundStyleWidgetView: WidgetNodeConvertible {
                 id: id,
                 kind: .background(
                     alignment: Alignment.center.widgetValue,
-                    ignoredEdges: ignoredEdges.widgetValue
+                    ignoredEdges: ignoredEdges.widgetValue,
+                    foregroundCount: foregroundNodes.count
                 ),
                 children: foregroundNodes + backgroundNodes
             )

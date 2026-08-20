@@ -29,14 +29,13 @@ package enum WidgetRuntimeComposition {
     }
 
     @MainActor
-    package static func run(definitions: [RuntimeWidgetDefinition]) throws {
+    package static func run(definitions: [RuntimeWidgetDefinition]) async throws {
         let bootstrap = state.withLock { $0.bootstrap }
-        // FIXME(INCOMPLETE_IMPLEMENTATION): Widget.main() reaches this branch when no M5
-        // platform host has installed the production bootstrap. A real Windows provider
-        // composition and blocking host lifecycle are required before startup may succeed.
         guard let bootstrap else {
             throw WidgetRuntimeError.hostUnavailable
         }
-        try bootstrap.run(registry: RuntimeWidgetRegistry(definitions: definitions))
+        try await bootstrap.run(
+            registry: RuntimeWidgetRegistry(definitions: definitions)
+        )
     }
 }

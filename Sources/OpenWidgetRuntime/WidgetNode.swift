@@ -20,7 +20,8 @@ package struct WidgetNode: Equatable, Sendable {
         case modified(WidgetModifier)
         case background(
             alignment: WidgetAlignment,
-            ignoredEdges: WidgetEdge?
+            ignoredEdges: WidgetEdge?,
+            foregroundCount: Int
         )
     }
 
