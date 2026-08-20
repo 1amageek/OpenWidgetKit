@@ -13,26 +13,26 @@ jobs:
 
     steps:
       - name: Check out OpenWidgetKit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           path: CoreFoundation/OpenWidgetKit
 
       - name: Check out OpenFoundation
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: 1amageek/OpenFoundation
           ref: 97e5aa8993133de9a253ce92ceeacc37cead3e73
           path: CoreFoundation/OpenFoundation
 
       - name: Check out OpenCoreGraphics
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: 1amageek/OpenCoreGraphics
           ref: bf9c4bab8d48cb940602c52c0567e62cb4f44e70
           path: CoreFoundation/OpenCoreGraphics
 
       - name: Check out swift-webgpu
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: 1amageek/swift-webgpu
           ref: 4242a88e96ca811cccbc54d4e82564461cd4524a
