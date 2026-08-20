@@ -234,8 +234,10 @@ The M5 source pins Windows App SDK 2.3.1, Widgets package 2.0.5, C++/WinRT
 and the currently verified Windows Swift 6.4 development snapshot from
 2026-08-14. The packaging gate verifies exact NuGet hashes and obtains each
 target architecture's Swift/Foundation payload from the pinned toolchain's
-official `rtl.dynamic.private` redistributable merge module. It preserves the
-private-assembly layout, checks every PE machine, and proves the Swift runtime
+official `rtl.shared.<architecture>.msm` redistributable merge module. In this
+name, `shared` describes dynamic Swift linkage; merging the module into the
+helper MSI still materializes an application-private runtime. The gate preserves
+that layout, checks every PE machine, and proves the Swift runtime
 dependency closure instead of searching across host and cross-target SDK trees.
 
 The Swift provider executable owns the packaged application. The C++/WinRT

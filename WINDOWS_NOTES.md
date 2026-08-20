@@ -209,10 +209,11 @@ Windows Providerは`OpenFoundation`をimport境界として使用し、OpenFound
 直接渡さず、bridge境界ではowned byte bufferと明示的なscalarだけを使用します。
 
 MSIXへ含めるSwift/Foundation runtime libraryは、Providerをcompile/linkしたtoolchainの公式
-`rtl.dynamic.private` redistributable merge moduleから取得します。Windows Swift installerが通常配置する
-runtimeはhost architectureだけなので、SDK全体から同名DLLを再帰検索してcross-target payloadを選びません。
-x64は`rtl.dynamic.private.amd64.msm`、ARM64は`rtl.dynamic.private.arm64.msm`を使用し、WiXによる
-administrative imageのprivate-assembly layoutを保持します。別release、別snapshot、別architectureの
+Swift 6.4 `rtl.shared.<architecture>.msm` redistributable merge moduleから取得します。この
+`shared`はdynamic Swift linkageを表し、helper MSIへmergeして行政展開することで
+application-privateなruntime payloadを得ます。Windows Swift installerが通常配置するruntimeはhost
+architectureだけなので、SDK全体から同名DLLを再帰検索してcross-target payloadを選びません。
+x64は`rtl.shared.amd64.msm`、ARM64は`rtl.shared.arm64.msm`を使用します。別release、別snapshot、別architectureの
 `Foundation`、`FoundationEssentials`、`FoundationInternationalization`、Swift runtime DLLを混在させません。
 最終executableとbridgeから辿るSwift/Foundation dependency closureがmerge module内で閉じることも検証します。
 

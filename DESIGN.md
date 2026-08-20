@@ -235,9 +235,10 @@ Foundation familyを完全に外すためです。
 
 Windows配布では、host runtime directoryやSDK全体から同名DLLを探索しません。Swift Windows
 toolchainはhost architectureのruntimeだけを通常配置し、cross-target runtimeはSDK同梱の
-redistributable merge moduleを正本にするためです。M5は固定installerに含まれる
-`rtl.dynamic.private.amd64.msm`または`rtl.dynamic.private.arm64.msm`をWiXで行政展開し、
-private-assembly layoutをそのままMSIXへ含めます。全PEのmachine、Foundation必須DLL、最終
+redistributable merge moduleを正本にするためです。M5は固定installerに含まれるSwift 6.4の
+`rtl.shared.amd64.msm`または`rtl.shared.arm64.msm`をWiXで行政展開し、application-privateな
+runtimeとしてMSIXへ含めます。ここで`shared`はdynamic Swift linkageを表し、machine-wideな
+配置を意味しません。全PEのmachine、Foundation必須DLL、最終
 dependency closure、merge moduleとWiX SDKのhashをarchitectureごとに検証します。
 
 ## Rendering strategy

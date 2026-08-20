@@ -248,7 +248,11 @@ function Expand-SwiftRuntimeRedistributable {
     } else {
         "arm64"
     }
-    $MergeModuleName = "rtl.dynamic.private.$MergeModuleArchitecture.msm"
+    # Swift 6.4 names the merge module for the dynamically linked runtime
+    # `rtl.shared`. The merge consumes that runtime into this application's
+    # private installation directory; `shared` describes Swift linkage, not a
+    # machine-wide installation policy.
+    $MergeModuleName = "rtl.shared.$MergeModuleArchitecture.msm"
     $MergeModules = @(
         Get-ChildItem -Path $RedistributablesDirectory `
             -Filter $MergeModuleName -File -Recurse -ErrorAction SilentlyContinue
