@@ -229,18 +229,18 @@ official Swift references:
 - [Foundation distributions](https://github.com/swiftlang/swift-foundation/blob/main/Distributions.md)
 - [Swift 6 Foundation](https://www.swift.org/blog/announcing-swift-6/)
 
-The M5 source pins Windows App SDK 2.3.1, Widgets package 2.0.5, Visual C++ v143,
-Windows SDK 10.0.26100.0, and the currently verified Windows Swift 6.4
-development snapshot from 2026-08-14. The packaging gate verifies exact NuGet
-hashes and discovers Swift/Foundation DLLs from the final executable and that
-same toolchain; it rejects mixed copies rather than using an unrelated fixed DLL
-directory.
+The M5 source pins Windows App SDK 2.3.1, Widgets package 2.0.5, C++/WinRT
+2.0.230706.1, Visual C++ v145, Windows SDK 10.0.26100.0, and the currently
+verified Windows Swift 6.4 development snapshot from 2026-08-14. The packaging
+gate verifies exact NuGet hashes and discovers Swift/Foundation DLLs from the
+final executable and that same toolchain; it rejects mixed copies rather than
+using an unrelated fixed DLL directory.
 
 ## Windows provider build gate
 
 `scripts/build-m5-windows.ps1` builds an unsigned x64 or ARM64 provider package.
 It validates the toolchain, NuGet graph, package configuration, runtime DLL
 origins, generated manifest, and MSIX contents. The workflow runs this script on
-`windows-2025` for both architectures. Signing, installation, gallery discovery,
-pinning, and visual behavior belong to M6 and are intentionally not reported by
-this build gate.
+the explicit `windows-2025-vs2026` image for both architectures. Signing,
+installation, gallery discovery, pinning, and visual behavior belong to M6 and
+are intentionally not reported by this build gate.

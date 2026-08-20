@@ -101,7 +101,7 @@ struct WindowsPackageManifestTests {
                 windowsAppSDKVersion: "2.3.1",
                 widgetsPackageVersion: "2.0.5",
                 cppWinRTVersion: "2.0.230706.1",
-                visualCToolset: "v143",
+                visualCToolset: "v145",
                 windowsSDKVersion: "10.0.26100.0",
                 foundationLinkMode: "dynamic"
             ),

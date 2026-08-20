@@ -225,8 +225,9 @@ M5 source baselineは次の通りです。
 | Swift Windows | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a` |
 | Windows App SDK | `2.3.1` |
 | Widgets NuGet package | `2.0.5` |
+| C++/WinRT NuGet package | `2.0.230706.1` |
 | Adaptive Cards host template | `1.6` |
-| Visual C++ toolset | `v143` |
+| Visual C++ toolset | `v145` |
 | Windows SDK | `10.0.26100.0` |
 | architectures | `x64`, `arm64` |
 | Foundation link mode | dynamic, discovered from final executable |

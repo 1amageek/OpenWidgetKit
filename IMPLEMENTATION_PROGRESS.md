@@ -237,7 +237,7 @@ as a typed unsupported action rather than ignored.
 - [x] Create deterministic MSIX manifest and packaging tooling
 - [x] Register COM server and Widget Provider extension from one configuration
 - [x] Validate CLSID/kind/family/resource metadata and derive resource URIs from canonical paths
-- [x] Add a `windows-2025` x64/ARM64 build workflow
+- [x] Add a `windows-2025-vs2026` x64/ARM64 build workflow
 - [x] Execute 12 Native tests for host generation fences, controller lifecycle, typed bridge status, and deterministic manifest generation
 - [x] Execute the new inactive lifecycle, recreation, shutdown-retry, transactional-fence, identity-retention, LRU, and complete-template regression tests
 - [ ] Build/link x64

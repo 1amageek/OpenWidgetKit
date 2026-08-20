@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build-windows-provider:
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -124,21 +124,16 @@ jobs:
               $RequiredComponents += "Microsoft.VisualStudio.Component.VC.Tools.ARM64"
           }
           $VsWhereArguments = @(
-              "-latest", "-products", "*", "-version", "[17.0,18.0)",
+              "-latest", "-products", "*", "-version", "[18.0,19.0)",
               "-requires"
           ) + $RequiredComponents + @("-property", "installationPath")
           $VsInstall = & $VsWhere @VsWhereArguments
           if (-not $VsInstall) {
-              throw "Visual Studio 2022 with the required v143 target tools was not found."
+              throw "Visual Studio 2026 with the required v145 target tools was not found."
           }
           Import-Module (Join-Path $VsInstall "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
-          $TargetArchitecture = if ("${{ matrix.architecture }}" -eq "arm64") {
-              "arm64"
-          } else {
-              "x64"
-          }
           Enter-VsDevShell -VsInstallPath $VsInstall -SkipAutomaticLocation `
-              -DevCmdArguments "-arch=$TargetArchitecture -host_arch=x64"
+              -DevCmdArguments "-arch=x64 -host_arch=x64"
           ./scripts/build-m5-windows.ps1 `
               -Architecture "${{ matrix.architecture }}" `
               -OutputDirectory (Join-Path $env:RUNNER_TEMP "m5-${{ matrix.architecture }}")
