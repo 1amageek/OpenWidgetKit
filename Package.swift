@@ -4,6 +4,9 @@ import PackageDescription
 
 let package = Package(
     name: "OpenWidgetKit",
+    platforms: [
+        .macOS(.v15)
+    ],
     products: [
         .library(
             name: "SwiftUI",
@@ -55,6 +58,10 @@ let package = Package(
                 "OpenWidgetRuntime",
                 .product(name: "OpenFoundation", package: "OpenFoundation")
             ]
+        ),
+        .testTarget(
+            name: "SwiftUITests",
+            dependencies: ["SwiftUI", "OpenWidgetRuntime"]
         ),
         .testTarget(
             name: "WidgetKitTests",

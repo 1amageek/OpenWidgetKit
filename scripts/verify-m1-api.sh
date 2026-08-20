@@ -11,12 +11,16 @@ readonly EXPECTED_XROS_SDK_BUILD="24M5347a"
 readonly EXPECTED_TVOS_SDK_BUILD="24J5346a"
 readonly EXPECTED_SWIFT_COMMIT="424cae54c1a10da"
 readonly EXPECTED_SWIFTUI_INTERFACE_SHA256="4360bfdc6d8d82d387805414cfe0159a9d78d261aee97a214d0c77f5ef01ff90"
+readonly EXPECTED_SWIFTUICORE_INTERFACE_SHA256="2f5f6d708ec1d7d2a5fc63cf27eb57f3cbce7beb29f4ca1436e08e893d40bfb3"
 readonly EXPECTED_WIDGETKIT_INTERFACE_SHA256="57f637423a9fc5cb1d796728142e87aeeebc803dbaa14831adb11cdf2736314c"
 readonly EXPECTED_IOS_SWIFTUI_INTERFACE_SHA256="b74bc6cfd5a4e1d4b68de8a3d3c6ec6ec36e13b92d4d7db5b6436ef4925c9f51"
+readonly EXPECTED_IOS_SWIFTUICORE_INTERFACE_SHA256="5664b8453cfdb2534c9444d153d070a2a94f0fcc9b9d16f88e42eee60e94c0cc"
 readonly EXPECTED_IOS_WIDGETKIT_INTERFACE_SHA256="6937fef5e51dda7842de9085b3206713bb9475c425ee88f6c2b6f246d52ee1b4"
 readonly EXPECTED_WATCHOS_SWIFTUI_INTERFACE_SHA256="b56d2190f2716aad4e46685f366c023dab44ae672ede558ca4ac16305cb153d6"
+readonly EXPECTED_WATCHOS_SWIFTUICORE_INTERFACE_SHA256="4b1c9a11810fc3ae7d414966014d71115015fc48e65ad45783f6415d8c6a0cb5"
 readonly EXPECTED_WATCHOS_WIDGETKIT_INTERFACE_SHA256="b38b91345630636e5eaf4c9effcb33d66c7d155ae31439d4146cac1a67619a28"
 readonly EXPECTED_XROS_SWIFTUI_INTERFACE_SHA256="fb46f2f2c9cff14cbe35b7eec19e55811cffcdc558e0b64771ecea3b40dae1b2"
+readonly EXPECTED_XROS_SWIFTUICORE_INTERFACE_SHA256="27e01eea3b2673579ee4befd4f7c99d3598292ec71112d7de94e453b97df85e9"
 readonly EXPECTED_XROS_WIDGETKIT_INTERFACE_SHA256="de1e37b5fda694b5998c91218776be7e20e4b6afc53688b2b20fd86c31e0bdaf"
 readonly PINNED_TOOLCHAIN="org.swift.64202608141a"
 readonly SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,7 +31,7 @@ cd "$REPOSITORY_ROOT"
 trap 'rm -rf "$TEMPORARY_DIRECTORY"' EXIT
 
 fail() {
-    printf 'M1 API verification failed: %s\n' "$1" >&2
+    printf 'OpenWidgetKit API verification failed: %s\n' "$1" >&2
     exit 1
 }
 
@@ -80,23 +84,32 @@ readonly SWIFT_VERSION_OUTPUT="$(TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swift --ve
 grep -Fq "$EXPECTED_SWIFT_COMMIT" <<<"$SWIFT_VERSION_OUTPUT" || fail "unexpected Swift compiler commit"
 
 readonly SWIFTUI_INTERFACE="$SDK_PATH/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/arm64e-apple-macos.swiftinterface"
+readonly SWIFTUICORE_INTERFACE="$SDK_PATH/System/Library/Frameworks/SwiftUICore.framework/Modules/SwiftUICore.swiftmodule/arm64e-apple-macos.swiftinterface"
 readonly WIDGETKIT_INTERFACE="$SDK_PATH/System/Library/Frameworks/WidgetKit.framework/Modules/WidgetKit.swiftmodule/arm64e-apple-macos.swiftinterface"
 readonly IOS_SWIFTUI_INTERFACE="$IOS_SDK_PATH/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/arm64e-apple-ios.swiftinterface"
+readonly IOS_SWIFTUICORE_INTERFACE="$IOS_SDK_PATH/System/Library/Frameworks/SwiftUICore.framework/Modules/SwiftUICore.swiftmodule/arm64e-apple-ios.swiftinterface"
 readonly IOS_WIDGETKIT_INTERFACE="$IOS_SDK_PATH/System/Library/Frameworks/WidgetKit.framework/Modules/WidgetKit.swiftmodule/arm64e-apple-ios.swiftinterface"
 readonly WATCHOS_SWIFTUI_INTERFACE="$WATCHOS_SDK_PATH/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/arm64_32-apple-watchos.swiftinterface"
+readonly WATCHOS_SWIFTUICORE_INTERFACE="$WATCHOS_SDK_PATH/System/Library/Frameworks/SwiftUICore.framework/Modules/SwiftUICore.swiftmodule/arm64_32-apple-watchos.swiftinterface"
 readonly WATCHOS_WIDGETKIT_INTERFACE="$WATCHOS_SDK_PATH/System/Library/Frameworks/WidgetKit.framework/Modules/WidgetKit.swiftmodule/arm64_32-apple-watchos.swiftinterface"
 readonly XROS_SWIFTUI_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/arm64e-apple-xros.swiftinterface"
+readonly XROS_SWIFTUICORE_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/SwiftUICore.framework/Modules/SwiftUICore.swiftmodule/arm64e-apple-xros.swiftinterface"
 readonly XROS_WIDGETKIT_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/WidgetKit.framework/Modules/WidgetKit.swiftmodule/arm64e-apple-xros.swiftinterface"
 readonly SWIFTUI_INTERFACE_SHA256="$(shasum -a 256 "$SWIFTUI_INTERFACE" | awk '{print $1}')"
+readonly SWIFTUICORE_INTERFACE_SHA256="$(shasum -a 256 "$SWIFTUICORE_INTERFACE" | awk '{print $1}')"
 readonly WIDGETKIT_INTERFACE_SHA256="$(shasum -a 256 "$WIDGETKIT_INTERFACE" | awk '{print $1}')"
 
 [[ "$SWIFTUI_INTERFACE_SHA256" == "$EXPECTED_SWIFTUI_INTERFACE_SHA256" ]] || fail "SwiftUI interface drift"
+[[ "$SWIFTUICORE_INTERFACE_SHA256" == "$EXPECTED_SWIFTUICORE_INTERFACE_SHA256" ]] || fail "SwiftUICore interface drift"
 [[ "$WIDGETKIT_INTERFACE_SHA256" == "$EXPECTED_WIDGETKIT_INTERFACE_SHA256" ]] || fail "WidgetKit interface drift"
 [[ "$(shasum -a 256 "$IOS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_IOS_SWIFTUI_INTERFACE_SHA256" ]] || fail "iOS SwiftUI interface drift"
+[[ "$(shasum -a 256 "$IOS_SWIFTUICORE_INTERFACE" | awk '{print $1}')" == "$EXPECTED_IOS_SWIFTUICORE_INTERFACE_SHA256" ]] || fail "iOS SwiftUICore interface drift"
 [[ "$(shasum -a 256 "$IOS_WIDGETKIT_INTERFACE" | awk '{print $1}')" == "$EXPECTED_IOS_WIDGETKIT_INTERFACE_SHA256" ]] || fail "iOS WidgetKit interface drift"
 [[ "$(shasum -a 256 "$WATCHOS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_WATCHOS_SWIFTUI_INTERFACE_SHA256" ]] || fail "watchOS SwiftUI interface drift"
+[[ "$(shasum -a 256 "$WATCHOS_SWIFTUICORE_INTERFACE" | awk '{print $1}')" == "$EXPECTED_WATCHOS_SWIFTUICORE_INTERFACE_SHA256" ]] || fail "watchOS SwiftUICore interface drift"
 [[ "$(shasum -a 256 "$WATCHOS_WIDGETKIT_INTERFACE" | awk '{print $1}')" == "$EXPECTED_WATCHOS_WIDGETKIT_INTERFACE_SHA256" ]] || fail "watchOS WidgetKit interface drift"
 [[ "$(shasum -a 256 "$XROS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_SWIFTUI_INTERFACE_SHA256" ]] || fail "visionOS SwiftUI interface drift"
+[[ "$(shasum -a 256 "$XROS_SWIFTUICORE_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_SWIFTUICORE_INTERFACE_SHA256" ]] || fail "visionOS SwiftUICore interface drift"
 [[ "$(shasum -a 256 "$XROS_WIDGETKIT_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_WIDGETKIT_INTERFACE_SHA256" ]] || fail "visionOS WidgetKit interface drift"
 [[ ! -e "$TVOS_SDK_PATH/System/Library/Frameworks/WidgetKit.framework" ]] || fail "WidgetKit unexpectedly exists in the tvOS SDK"
 
@@ -135,6 +148,16 @@ for platform_specification in \
             -sdk "$platform_sdk_path" \
             -target "$platform_target" \
             Fixtures/NegativeAPI/TimelineReloadPolicySendable.swift
+
+    expect_typecheck_failure \
+        "conformance of 'ViewBuilder' to 'Sendable' is unavailable" \
+        env TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swiftc \
+            -parse-as-library \
+            -swift-version 6 \
+            -typecheck \
+            -sdk "$platform_sdk_path" \
+            -target "$platform_target" \
+            Fixtures/NegativeAPI/ViewBuilderSendable.swift
 done
 
 for behavior_platform_specification in \
@@ -171,6 +194,15 @@ expect_typecheck_failure \
         -sdk "$SDK_PATH" \
         Fixtures/NegativeAPI/TimelineReloadPolicySendable.swift
 
+expect_typecheck_failure \
+    "conformance of 'ViewBuilder' to 'Sendable' is unavailable" \
+    env TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swiftc \
+        -parse-as-library \
+        -swift-version 6 \
+        -typecheck \
+        -sdk "$SDK_PATH" \
+        Fixtures/NegativeAPI/ViewBuilderSendable.swift
+
 TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swift build --target OpenWidgetKitAPIFixture
 readonly REPLACEMENT_BEHAVIOR_OUTPUT="$(
     TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swift run OpenWidgetKitBehaviorFixture
@@ -205,8 +237,18 @@ expect_typecheck_failure \
         "${replacement_module_flags[@]}" \
         Fixtures/NegativeAPI/TimelineReloadPolicySendable.swift
 
+expect_typecheck_failure \
+    "conformance of 'ViewBuilder' to 'Sendable' is unavailable" \
+    env TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swiftc \
+        -parse-as-library \
+        -swift-version 6 \
+        -typecheck \
+        -sdk "$SDK_PATH" \
+        "${replacement_module_flags[@]}" \
+        Fixtures/NegativeAPI/ViewBuilderSendable.swift
+
 TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swift build \
     --package-path Fixtures/WorkspaceAPI \
     --target OpenWidgetKitWorkspaceAPIFixture
 
-printf 'M1 Apple and replacement API verification passed.\n'
+printf 'OpenWidgetKit Apple and replacement API verification passed.\n'

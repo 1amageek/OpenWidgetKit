@@ -2,15 +2,14 @@
 
 ## Status
 
-この文書はOpenWidgetKitの規範アーキテクチャです。現在は基礎runtime実装段階であり、Package.swift、
-OpenFoundation import boundary、初期timeline surface、timeline validationまでsourceがあります。確認済み事実、
+この文書はOpenWidgetKitの規範アーキテクチャです。現在はM2 semantic documentとhost-neutral M3 runtimeまで
+sourceがあり、M4 Adaptive Cards compilerとM5 Windows hostは未実装です。確認済み事実、
 目標設計、必要な変更、未解決事項を
 区別して記載します。
 
-timeline validationは`OpenWidgetRuntime`がentry date配列とhost非依存reload policyを受け取ります。
-`WidgetKit`は公開`Timeline`をこの内部値へloweringするだけであり、runtimeが公開WidgetKit型へ依存する
-逆流はありません。scheduler、provider callback owner、Windows host adapterはこのvalidated valueを
-消費する後続責務です。
+timeline validation、provider callback owner、registry、schedulerは`OpenWidgetRuntime`がhost非依存値として
+所有します。`WidgetKit`は公開`Timeline`とconfigurationを内部値へloweringし、runtimeが公開WidgetKit型へ
+依存する逆流はありません。Windows host adapterはgeneration fenceを実装してこのruntimeを消費します。
 
 ## Confirmed current facts
 
@@ -34,7 +33,7 @@ timeline validationは`OpenWidgetRuntime`がentry date配列とhost非依存relo
 ### CoreFoundation workspace
 
 - OpenCoreGraphicsの現行非WASM `CGContext`はsoftware rendererを選択するが、Windowsでの
-  build/runtimeはこのpackageの証拠としてまだ確認されていない。
+  build/runtimeはこのpackageのrenderer証拠としてまだ確認されていない。
 - OpenCoreAnimationのrenderer factoryはWASMをWebGPU、それ以外をMetalとしており、
   Windows backendは存在しない。
 - CoreFoundation workspace内にOpenSwiftUI/OpenWidgetKitの既存実装はなかった。
@@ -48,8 +47,8 @@ timeline validationは`OpenWidgetRuntime`がentry date配列とhost非依存relo
 - `FoundationEssentials`だけでは`CGFloat`、`CGPoint`、`CGSize`、`CGRect`および完全な`Bundle`を
   提供しない。
 - OpenFoundationのsource boundaryは非Embeddedでtoolchain Foundationをre-exportし、Embeddedで
-  portable subsetとCFCG値型を宣言する。Native、通常WASM、Embedded WASMのgeometry
-  compile/link/runtimeは確認済みだが、Windowsはまだ検証されていない。
+  portable subsetとCFCG値型を宣言する。Native、通常WASM、Embedded WASM、Windowsの対象gateで
+  geometry identityとFoundation boundaryが確認済みである。
 - OpenCoreGraphicsはOpenFoundationへ直接依存して同じCFCG値型をre-exportする。このためWindows、
   WASM、EmbeddedのOpenCoreGraphicsとOpenWidgetKitは変換なしで同じ値identityを共有する。
 
@@ -269,6 +268,27 @@ sequenceDiagram
     Service->>Bridge: Owned payload
     Bridge->>Host: UpdateWidget
 ```
+
+## Shared-state and ownership review matrix
+
+M2/M3のshared sourceにはEmbedded分岐、raw-state fallback、no-op lockはありません。Windows列は同じ
+source contractを示しますが、M2/M3のWindows compile/runtime gateは未実行です。
+
+| Logical state | Native storage/isolation | normal WASM | Windows contract | Read/mutation entry | Shutdown/release |
+|---|---|---|---|---|---|
+| runtime instances and generations | `WidgetRuntimeService` actor | same actor | same actor; target verification pending | actor methods only | tasks cancelled, instances removed, host removal fence awaited |
+| provider request terminal state | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; verification pending | `claimProviderCallback` and exactly-once `complete` | timeout task cancelled and continuation resumed once |
+| provider callback value handoff | `Mutex<Payload>` one-shot owner | same owner | same owner; verification pending | callback installs, MainActor consumes once | payload cleared on take; late/duplicate callback rejected |
+| runtime composition | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; verification pending | install/current/uninstall composition functions | uninstall clears both references |
+| view identity map | `WidgetIdentityStore` on `MainActor` | same isolation | same isolation; verification pending | `identifier(for:namespace:)` | released with widget instance |
+| semantic document/resources | immutable `Sendable` values | same values | same values; verification pending | constructed on `MainActor`, read by runtime/host | value lifetime; no external handle |
+| host generation fence | test host uses actor state | protocol contract only | M5 adapter must implement monotonic fence | invalidate/apply/remove | removal permanently rejects stale commits |
+
+`TimelineProvider.Entry`はApple API上`Sendable`を要求しませんが、completionは`@Sendable`です。この互換境界だけは
+callbackが引き渡した`Timeline<Entry>`を`Any` payloadとしてMutex ownerへ移し、MainActorで一度だけ取り出します。
+`Payload`の`@unchecked Sendable`はこの一箇所に限定し、providerはcompletion後に同じentry aliasを変更しないことを
+ownership contractとします。`Provider`と`Content`自体は`StaticConfigurationStorage`のMainActor isolationから
+外へ出しません。
 
 ## Error philosophy
 

@@ -1,3 +1,5 @@
+import OpenWidgetRuntime
+
 @available(iOS 14.0, macOS 11.0, watchOS 9.0, visionOS 26.0, *)
 @available(tvOS, unavailable)
 @preconcurrency
@@ -27,6 +29,22 @@ public enum WidgetFamily: Int, CustomDebugStringConvertible, CustomStringConvert
             return "systemMedium"
         case .systemLarge:
             return "systemLarge"
+        }
+    }
+
+    package init(runtimeValue: RuntimeWidgetFamily) {
+        switch runtimeValue {
+        case .systemSmall: self = .systemSmall
+        case .systemMedium: self = .systemMedium
+        case .systemLarge: self = .systemLarge
+        }
+    }
+
+    package var runtimeValue: RuntimeWidgetFamily {
+        switch self {
+        case .systemSmall: .systemSmall
+        case .systemMedium: .systemMedium
+        case .systemLarge: .systemLarge
         }
     }
 }

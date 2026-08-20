@@ -11,31 +11,35 @@
 | M1 API baseline | Complete and verified | `API_COMPATIBILITY.md`, both M1 verification scripts, and `Verification/M1_WINDOWS_EVIDENCE.json` |
 | Windows constraints | Documented | `WINDOWS_NOTES.md` |
 | Foundation/geometry ownership | Implemented and verified on Native, normal WASM, and Windows | OpenFoundation owns the canonical CFCG boundary and re-exports toolchain Foundation on full Swift |
-| public SwiftUI API | Foundation slice only | `EnvironmentValues` substrate; View/Widget surface remains incomplete |
-| public WidgetKit API | Foundation slice only | initial timeline entry/provider/value/context/family declarations |
-| runtime behavior | Foundation slice only | finite, nonempty, ordered timeline and reload-date validation |
+| public SwiftUI API | M2 implemented in source | widget-scoped View DSL, builders, Widget protocols, environment, and semantic lowering |
+| public WidgetKit API | host-neutral M3 implemented in source | static configuration, provider bridge, registry bootstrap, and WidgetCenter routing |
+| runtime behavior | host-neutral M3 implemented | provider ownership, validation, three reload policies, generation fences, cancellation, and shutdown |
 | Windows provider | Not implemented | no bridge or packaging target exists |
-| build/test/runtime verification | Native, normal WASM, and Windows M1 gates passed | 12 Native tests, Apple system-module fixtures, normal WASM builds, and pinned x86_64 Windows compile/runtime evidence |
+| build/test/runtime verification | M2/M3 Native and normal WASM pass; Windows M2/M3 pending | 44 focused Native tests, Apple system-module fixtures, and normal WASM build; pinned Windows evidence remains M1-only |
 
 Import-only success, declaration presence, or Package.swift resolution is not implementation evidence.
 
-## Current foundational slice
+## Current implemented path
 
 ```text
-WidgetKit Timeline<Entry>
-    -> package lowering
-        -> OpenWidgetRuntime TimelineValidator
-            -> ValidatedTimeline
-            -> future TimelineScheduler
+Widget / WidgetBundle
+    -> StaticConfiguration
+        -> one-shot TimelineProvider bridge
+            -> immutable WidgetDocument entries
+                -> generation-safe TimelineScheduler
+                    -> RuntimeWidgetHost generation fence
+                        -> M4/M5 concrete compiler and host (pending)
 ```
 
-Source behavior tests cover accepted timelines, empty timelines, nonfinite dates,
-out-of-order entries, reload dates, entry relevance, public value storage, canonical CFCG values, and the Apple-compatible
-`EnvironmentVariants` key-path subscript call shape. All 12 Native tests passed on 2026-08-20, the initial API fixtures
-typechecked against the pinned macOS 11, iOS 14, watchOS 9, and visionOS 26 system modules, Apple and replacement
-behavior output matched, and the normal WASM API, behavior, and OpenCoreGraphics identity fixtures built with the pinned Swift 6.4 snapshot.
-The pinned x86_64 Windows gate also compiled both replacement fixtures, executed the behavior fixture, verified the negative
-conformance contract, and recorded Foundation module/runtime hashes. Real Widgets Board behavior remains an M6 requirement.
+The 44 focused Native tests cover the initial timeline values plus semantic
+lowering, stable identities, resource ownership, invalid values, provider
+completion ownership, timeout/duplicate/late completion, all three scheduler
+policies, non-advancing reload rejection, registry failures, bootstrap routing,
+WidgetCenter routing, generation invalidation, delete during a suspended host
+apply, and shutdown. The M2/M3 shared source fixture typechecks against the
+pinned Apple SDKs and the replacement, and the replacement fixture builds for
+normal WASM with the pinned Swift 6.4 snapshot. The existing x86_64 Windows gate
+covers M1 only; M2/M3 Windows compile/runtime evidence has not yet been produced.
 
 ## Milestone dependency graph
 
@@ -43,8 +47,8 @@ conformance contract, and recorded Foundation module/runtime hashes. Real Widget
 flowchart LR
     M0["M0 Contract and skeleton<br/>complete"]
     M1["M1 Apple API fixtures<br/>complete"]
-    M2["M2 SwiftUI subset and IR<br/>2-4 weeks"]
-    M3["M3 Timeline runtime<br/>2-3 weeks"]
+    M2["M2 SwiftUI subset and IR<br/>source + Native/WASM verified"]
+    M3["M3 Timeline runtime<br/>source + Native/WASM verified"]
     M4["M4 Adaptive Cards compiler<br/>2-3 weeks"]
     M5["M5 WinRT bridge and MSIX<br/>2-3 weeks"]
     M6["M6 Real Board static E2E<br/>1-2 weeks"]
@@ -123,44 +127,54 @@ Required work:
 
 ## M2: Widget-scoped SwiftUI and semantic document
 
-- [ ] `View` protocol and builder contract
-- [ ] conditional/tuple/group content
-- [ ] `Text`
-- [ ] limited `Image`
-- [ ] `VStack`
-- [ ] `HStack`
-- [ ] `Spacer`
-- [ ] `Divider`
-- [ ] stable-identity `ForEach`
-- [ ] font/color/padding/frame/background/line-limit subset
-- [ ] widget environment snapshot
-- [ ] immutable `WidgetDocument`
-- [ ] stable node/action/resource identities
-- [ ] unsupported View/modifier typed errors
-- [ ] success and failure behavior tests for every supported declaration
+- [x] `View` protocol and variadic builder contract
+- [x] conditional/tuple/group/erased content
+- [x] `Text`
+- [x] limited `Image` with a semantic resource table
+- [x] `VStack`
+- [x] `HStack`
+- [x] `Spacer`
+- [x] `Divider`
+- [x] stable-identity `ForEach`
+- [x] font/color/padding/frame/background/line-limit subset
+- [x] widget environment snapshot
+- [x] immutable `WidgetDocument`
+- [x] stable node and resource identities
+- [x] unsupported View/modifier typed errors
+- [x] success and failure behavior tests for the supported semantic surface
+- [ ] Re-run the M2 compile and behavior gates on the pinned Windows toolchain
+
+Action identity belongs to M7 because M2 deliberately declares no interaction
+surface. Adding an unused action type in M2 would create a contract without a
+producer or consumer.
 
 Canvas, Path, ZStack, gradient, animation, general application navigation, and responder APIs remain
 unadvertised until a later milestone defines their semantics.
 
 ## M3: WidgetKit configuration and timeline runtime
 
-- [ ] `Widget` bootstrap into runtime registration
-- [ ] `WidgetConfiguration` internal lowering contract
-- [ ] `StaticConfiguration`
-- [ ] immutable widget registry and duplicate-kind failure
+- [x] `Widget` and `WidgetBundle` lowering into an installed runtime bootstrap
+- [x] `WidgetConfiguration` internal lowering contract
+- [x] `StaticConfiguration`
+- [x] immutable widget registry and duplicate-kind failure
 - [x] `TimelineEntry` declaration and default relevance (Native/WASM/Windows verified)
 - [x] `TimelineProvider` callback declaration (Native/WASM/Windows verified)
-- [ ] one-shot completion ownership
-- [ ] timeout/duplicate/late completion failures
+- [x] one-shot completion ownership
+- [x] timeout/duplicate/late completion failures
 - [x] `Timeline` value and validation lowering (Native/WASM/Windows verified)
 - [x] `TimelineReloadPolicy` value and runtime lowering (Native/WASM/Windows verified)
-- [ ] `.atEnd`, `.after`, `.never` scheduler semantics
+- [x] `.atEnd`, `.after`, `.never` scheduler semantics
 - [x] Initial `WidgetFamily` values and context value surface (Native/WASM/Windows verified)
-- [ ] Host `WidgetFamily` context mapping
-- [ ] `WidgetCenter` reload behavior
-- [ ] instance generation and stale result rejection
-- [ ] shutdown/cancellation behavior
-- [ ] concurrent reload/delete/action tests
+- [x] Host `WidgetFamily` context mapping
+- [x] `WidgetCenter` query and reload routing
+- [x] instance generation and stale result rejection at provider and host commit boundaries
+- [x] shutdown/cancellation behavior
+- [x] reload/delete race and suspended-host-apply tests
+- [ ] Re-run the M3 compile and behavior gates on the pinned Windows toolchain
+
+The concrete production bootstrap remains M5. Without an installed host,
+`Widget.main()` reaches the explicitly marked incomplete composition branch and
+fails instead of reporting a placeholder success. Action routing remains M7.
 
 ## M4: Adaptive Cards compiler
 

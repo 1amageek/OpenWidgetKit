@@ -1,8 +1,9 @@
-# OpenWidgetKit M1 API Compatibility Baseline
+# OpenWidgetKit API Compatibility Baseline
 
 ## Purpose
 
-This document is the M1 source-of-truth for the initial Widget API inventory.
+This document is the source-of-truth for the initial Widget API inventory and
+the M2/M3 source-compatibility surface.
 It separates Apple SDK facts from OpenWidgetKit implementation status. An API
 listed here is not implemented merely because its Apple declaration and compile
 fixture have been recorded.
@@ -18,10 +19,10 @@ fixture have been recorded.
 | visionOS SDK | 27.0, build `24M5347a` |
 | tvOS SDK | 27.0, build `24J5346a`; no WidgetKit framework is present |
 | Swift compiler | Swift 6.4 development snapshot, compiler commit `424cae54c1a10da` |
-| macOS SwiftUI / WidgetKit interfaces | SHA-256 `4360bfdc6d8d82d387805414cfe0159a9d78d261aee97a214d0c77f5ef01ff90` / `57f637423a9fc5cb1d796728142e87aeeebc803dbaa14831adb11cdf2736314c` |
-| iOS SwiftUI / WidgetKit interfaces | SHA-256 `b74bc6cfd5a4e1d4b68de8a3d3c6ec6ec36e13b92d4d7db5b6436ef4925c9f51` / `6937fef5e51dda7842de9085b3206713bb9475c425ee88f6c2b6f246d52ee1b4` |
-| watchOS SwiftUI / WidgetKit interfaces | SHA-256 `b56d2190f2716aad4e46685f366c023dab44ae672ede558ca4ac16305cb153d6` / `b38b91345630636e5eaf4c9effcb33d66c7d155ae31439d4146cac1a67619a28` |
-| visionOS SwiftUI / WidgetKit interfaces | SHA-256 `fb46f2f2c9cff14cbe35b7eec19e55811cffcdc558e0b64771ecea3b40dae1b2` / `de1e37b5fda694b5998c91218776be7e20e4b6afc53688b2b20fd86c31e0bdaf` |
+| macOS SwiftUI / SwiftUICore / WidgetKit interfaces | SHA-256 `4360bfdc6d8d82d387805414cfe0159a9d78d261aee97a214d0c77f5ef01ff90` / `2f5f6d708ec1d7d2a5fc63cf27eb57f3cbce7beb29f4ca1436e08e893d40bfb3` / `57f637423a9fc5cb1d796728142e87aeeebc803dbaa14831adb11cdf2736314c` |
+| iOS SwiftUI / SwiftUICore / WidgetKit interfaces | SHA-256 `b74bc6cfd5a4e1d4b68de8a3d3c6ec6ec36e13b92d4d7db5b6436ef4925c9f51` / `5664b8453cfdb2534c9444d153d070a2a94f0fcc9b9d16f88e42eee60e94c0cc` / `6937fef5e51dda7842de9085b3206713bb9475c425ee88f6c2b6f246d52ee1b4` |
+| watchOS SwiftUI / SwiftUICore / WidgetKit interfaces | SHA-256 `b56d2190f2716aad4e46685f366c023dab44ae672ede558ca4ac16305cb153d6` / `4b1c9a11810fc3ae7d414966014d71115015fc48e65ad45783f6415d8c6a0cb5` / `b38b91345630636e5eaf4c9effcb33d66c7d155ae31439d4146cac1a67619a28` |
+| visionOS SwiftUI / SwiftUICore / WidgetKit interfaces | SHA-256 `fb46f2f2c9cff14cbe35b7eec19e55811cffcdc558e0b64771ecea3b40dae1b2` / `27e01eea3b2673579ee4befd4f7c99d3598292ec71112d7de94e453b97df85e9` / `de1e37b5fda694b5998c91218776be7e20e4b6afc53688b2b20fd86c31e0bdaf` |
 
 The interface hashes are verification inputs. The SDK files remain the
 authority; this repository does not copy the complete Apple interfaces.
@@ -49,6 +50,28 @@ surface. The declarations below normalize SDK qualification such as
 `Widget.main()` and `WidgetBundle.main()` are supplied by WidgetKit extensions
 and are `@MainActor @preconcurrency`. Swift owns the process entry point in the
 planned Windows provider architecture.
+
+### M2 SwiftUI subset inventory
+
+The following is the deliberately bounded semantic surface. Each declaration
+keeps the current SDK's source-facing generic constraints, labels, builder,
+availability, isolation, and relevant conformance behavior. APIs not listed
+remain undeclared.
+
+| Family | Supported source contract |
+|---|---|
+| view protocols/builders | `View`, `ViewBuilder`, `ContentBuilder` alias, `DynamicProperty`, `EnvironmentKey`, `EnvironmentValues`, and `@Environment`; `ViewBuilder: Sendable` remains explicitly unavailable |
+| structural content | `EmptyView`/`EmptyContent`, `TupleView`, `_ConditionalContent`, optional content, `AnyView`, and unconstrained `Group<Content>` with conditional `View` conformance |
+| layout | `VStack`, `HStack`, `Spacer`, `Divider`, `HorizontalAlignment`, `VerticalAlignment`, `Alignment`, `Edge`, and `EdgeInsets` |
+| values | `LocalizedStringKey`, `Text`, limited named/system `Image`, `Color`, `ColorScheme`, `Font`, and `ShapeStyle: Sendable` |
+| collection | both initial `ForEach` initializers with stable `Hashable` identity |
+| modifiers | initial padding and frame overloads, font, foreground color, line limit, three background overloads, environment, and color scheme |
+
+The M2 semantic document preserves ignored safe-area edges, localized versus
+verbatim text, image labels/decorative state, resource identity, view identity,
+environment snapshots, and modifier parameters. Unsupported custom primitive
+views, environment keys, styles, invalid layout ranges, invalid line limits,
+nonfinite values, and invalid resources fail with typed semantic errors.
 
 ### Exact timeline declarations
 
@@ -85,10 +108,30 @@ public struct Timeline<EntryType> where EntryType: TimelineEntry {
 ### Intentional portable differences
 
 Apple's `WidgetConfiguration` has a public low-level graph requirement whose
-signature names SwiftUI implementation types. OpenWidgetKit must not reproduce
-those private graph types. Its future protocol will preserve the source-facing
-`Body` contract and provide an internal host-neutral lowering requirement with a
-default implementation.
+signature names SwiftUI implementation types. OpenWidgetKit does not reproduce
+those private graph types. Its protocol preserves the source-facing `Body`
+contract and uses a package-internal host-neutral lowering requirement with a
+recursive default implementation.
+
+The same rule applies to Apple low-level graph requirements on `View`,
+`DynamicProperty`, and `ShapeStyle`. OpenWidgetKit preserves the source-facing
+protocol relationships, including `DynamicProperty.update()` and
+`ShapeStyle: Sendable`, but owns semantic lowering through package-internal
+contracts instead of declaring placeholder graph types.
+
+The replacement package's macOS deployment floor is macOS 15 because its
+host-neutral runtime uses `Synchronization.Mutex`. Individual public
+declarations retain Apple's availability annotations. Apple applications do
+not link the replacement on macOS, and native replacement builds are conformance
+tests rather than a back-deployed product promise.
+
+The pinned Swift 6.4 snapshot can emit `#SendableMetatypes` while the
+`TimelineProvider` bridge captures `Provider.Entry.Type` in the callback
+handoff. Adding `Provider.Entry: SendableMetatype` would change Apple's public
+generic contract, so OpenWidgetKit keeps the exact unconstrained associated
+type and confines the one-shot value transfer to a mutex-protected owner. This
+diagnostic is tracked by [Swift issue 82116](https://github.com/swiftlang/swift/issues/82116);
+it is not suppressed by weakening the public API.
 
 `TimelineReloadPolicy` must remain non-`Sendable`, matching Apple. Swift 6 rejects
 stored global values whose public type is not `Sendable`, even when the values
@@ -152,8 +195,10 @@ flowchart LR
 | `Fixtures/AppleAPI/WidgetCenterSurface.swift` | initial `WidgetCenter` query and reload call shapes |
 | `Fixtures/AppleAPI/OpenWidgetKitFoundationSurface.swift` | `CGSize` and both environment-variant key-path subscripts |
 | `Fixtures/SharedAPI/InitialTimelineSurface.swift` | one source file against Apple and replacement timeline APIs, including Foundation geometry |
+| `Fixtures/SharedAPI/M2M3Surface.swift` | the M2 View DSL, static configuration modifiers, WidgetBundle builder, and WidgetCenter call shapes against Apple and replacement modules |
 | `Fixtures/BehaviorAPI/M1Behavior.swift` | differential runtime output for initial family, reload-policy, and relevance behavior |
 | `Fixtures/NegativeAPI/TimelineReloadPolicySendable.swift` | both implementations reject the non-Apple `Sendable` conformance |
+| `Fixtures/NegativeAPI/ViewBuilderSendable.swift` | both implementations preserve the explicitly unavailable `ViewBuilder: Sendable` conformance |
 | `Fixtures/WorkspaceAPI` | OpenWidgetKit context geometry passes directly into OpenCoreGraphics APIs without conversion |
 
 Run `scripts/verify-m1-api.sh` on the pinned macOS host. It validates every
@@ -191,11 +236,12 @@ executes the gate, and uploads the JSON evidence. The workflow is dispatch-only.
 
 ## Evidence status
 
-As of 2026-08-20, the pinned Apple API fixtures typecheck for macOS 11, iOS 14,
-watchOS 9, and visionOS 26, and the replacement checks pass on the local arm64
-macOS host. All 12 focused Native behavior tests pass. The normal WASM API,
-behavior, and OpenCoreGraphics identity fixture targets also build with the
-pinned Swift 6.4 snapshot.
+As of 2026-08-20, the pinned Apple API fixtures, including the M2/M3 source
+surface, typecheck for macOS 11, iOS 14, watchOS 9, and visionOS 26, and the
+replacement checks pass on the local arm64 macOS host. All 44 focused Native
+behavior tests pass. The normal WASM API fixture also builds with the pinned
+Swift 6.4 snapshot. The Windows evidence below remains the M1 baseline and does
+not yet cover M2/M3.
 
 The pinned Windows gate passed on the `win25-vs2026` x86_64 runner in
 [GitHub Actions run 32320007986](https://github.com/1amageek/OpenWidgetKit/actions/runs/32320007986)

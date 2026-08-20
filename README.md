@@ -29,14 +29,19 @@ add platform conditionals to their imports or widget definitions.
 
 ## Status
 
-The package is currently at the foundational runtime stage. It implements the
-initial iOS 14 and macOS 11 timeline value and provider surface, including entry
-relevance, the basic `TimelineProviderContext`, and host-independent timeline
-validation. The Windows Provider, provider completion ownership, scheduler,
-SwiftUI View DSL, and Adaptive Cards conversion are not implemented. Each source
-target uses `FIXME(INCOMPLETE_IMPLEMENTATION)` to identify its incomplete surface.
-The M1 API inventory and compatibility-fixture milestone is complete across the
-pinned Apple SDKs, normal WASM, and pinned x86_64 Windows toolchain.
+M2 and the host-neutral portion of M3 are implemented in source. The package now
+contains the widget-scoped SwiftUI view subset, immutable semantic documents,
+`Widget` and `StaticConfiguration` lowering, one-shot provider completion
+ownership, an immutable registry, generation-safe timeline scheduling, and
+`WidgetCenter` control routing. Focused Native behavior tests and the normal WASM
+build exercise these paths. The same M2/M3 source fixture also typechecks against
+the pinned Apple SwiftUI, SwiftUICore, and WidgetKit interfaces.
+
+This is not yet a usable Windows Widget Provider. Adaptive Cards compilation is
+M4, and the concrete C++/WinRT host, production bootstrap, and MSIX packaging are
+M5. The previously verified Windows M1 baseline does not establish that the new
+M2/M3 implementation builds or runs on Windows; that target revalidation remains
+pending.
 
 Package structure or import availability must not be treated as evidence of
 implementation completion. See
@@ -45,10 +50,10 @@ and completion criteria.
 
 ```mermaid
 flowchart LR
-    Provider["TimelineProvider"] --> Values["Timeline / reload policy"]
-    Values --> Validator["OpenWidgetRuntime validator<br/>implemented in source"]
-    Validator --> Scheduler["Timeline scheduler<br/>not implemented"]
-    Scheduler --> Windows["Windows host<br/>not implemented"]
+    Provider["TimelineProvider"] --> Document["SwiftUI semantic document<br/>M2 implemented"]
+    Document --> Scheduler["Generation-safe timeline runtime<br/>M3 implemented"]
+    Scheduler --> Compiler["Adaptive Cards compiler<br/>M4 pending"]
+    Compiler --> Windows["Windows host and packaging<br/>M5 pending"]
 ```
 
 ## Documents
@@ -59,7 +64,7 @@ flowchart LR
 | [SPECIFICATION.md](SPECIFICATION.md) | Normative module, runtime, IR, timeline, and host integration specification |
 | [DESIGN.md](DESIGN.md) | Responsibility boundaries, design decisions, alternatives, and position within the CoreFoundation workspace |
 | [WINDOWS_NOTES.md](WINDOWS_NOTES.md) | Windows-specific constraints for COM, MSIX, Adaptive Cards, callback lifetime, and related APIs |
-| [API_COMPATIBILITY.md](API_COMPATIBILITY.md) | Pinned M1 Apple API inventory, compatibility differences, fixtures, and Windows compile baseline |
+| [API_COMPATIBILITY.md](API_COMPATIBILITY.md) | Pinned Apple API inventory, M2/M3 compatibility surface, fixtures, and Windows M1 compile baseline |
 | [Verification/M1_WINDOWS_EVIDENCE.json](Verification/M1_WINDOWS_EVIDENCE.json) | Normalized pinned Windows toolchain, behavior, module, and runtime evidence for M1 |
 | [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | Ledger of unimplemented APIs, milestones, and verification evidence |
 
