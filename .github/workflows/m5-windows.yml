@@ -70,7 +70,29 @@ jobs:
                       -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
               }
           }
-          $SwiftExecutable = Get-Command swift.exe -ErrorAction Stop
+          $SearchRoots = @(
+              (Join-Path $env:LOCALAPPDATA "Programs\Swift"),
+              (Join-Path $env:ProgramFiles "Swift")
+          ) | Where-Object { Test-Path $_ }
+          $SwiftCandidates = @(foreach ($Root in $SearchRoots) {
+              Get-ChildItem -Path $Root -Recurse -Filter swift.exe -File |
+                  Where-Object {
+                      $_.FullName -match '[\\/]usr[\\/]bin[\\/]swift\.exe$'
+                  }
+          })
+          $SwiftExecutable = @($SwiftCandidates | Where-Object {
+              $CandidateInfo = (& $_.FullName -print-target-info |
+                  ConvertFrom-Json)
+              $CandidateInfo.swiftCompilerTag -eq $Snapshot
+          })
+          if ($SwiftExecutable.Count -ne 1) {
+              throw "Expected exactly one Swift executable for $Snapshot; found $($SwiftExecutable.Count)."
+          }
+          $SwiftExecutable = $SwiftExecutable[0]
+          $SwiftBin = $SwiftExecutable.DirectoryName
+          $env:Path = "$SwiftBin;$env:Path"
+          $SwiftBin | Out-File `
+              -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $env:OPENWIDGET_SWIFT_SNAPSHOT = $Snapshot
           $env:OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER = $Snapshot
           "OPENWIDGET_SWIFT_SNAPSHOT=$Snapshot" | Out-File `

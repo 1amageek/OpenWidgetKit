@@ -56,6 +56,13 @@ try {
     if (-not $ModuleSearchDirectories) {
         throw "No replacement Swift module search paths were found."
     }
+    $ClangModuleMaps = @(
+        Get-ChildItem -Path .build -Recurse -Filter module.modulemap -File |
+            Sort-Object FullName -Unique
+    )
+    if (-not $ClangModuleMaps) {
+        throw "No replacement Clang module maps were found."
+    }
 
     $NegativeArguments = @(
         "-parse-as-library"
@@ -65,6 +72,12 @@ try {
     )
     foreach ($ModuleSearchDirectory in $ModuleSearchDirectories) {
         $NegativeArguments += @("-I", $ModuleSearchDirectory)
+    }
+    foreach ($ModuleMap in $ClangModuleMaps) {
+        $NegativeArguments += @(
+            "-Xcc",
+            "-fmodule-map-file=$($ModuleMap.FullName)"
+        )
     }
     $NegativeArguments += "Fixtures/NegativeAPI/TimelineReloadPolicySendable.swift"
 
