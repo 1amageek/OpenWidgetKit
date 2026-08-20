@@ -66,6 +66,23 @@ jobs:
               throw "Swift installer failed with exit code $($Process.ExitCode)."
           }
 
+          # The installer registers SDKROOT, runtime paths, and the toolchain path
+          # in persistent Windows environment scopes. This runner process predates
+          # the installation, so explicitly import the registered environment before
+          # invoking any compiler command.
+          foreach ($Level in "Machine", "User") {
+              [Environment]::GetEnvironmentVariables($Level).GetEnumerator() |
+                  ForEach-Object {
+                      if ($_.Name -eq "Path") {
+                          $_.Value = ("$env:Path;$($_.Value)" -split ";" |
+                              Where-Object { $_ } |
+                              Select-Object -Unique) -join ";"
+                      }
+                      $_
+                  } |
+                  Set-Content -Path { "Env:$($_.Name)" }
+          }
+
           $SearchRoots = @(
               (Join-Path $env:LOCALAPPDATA "Programs\Swift"),
               (Join-Path $env:ProgramFiles "Swift")
@@ -81,8 +98,13 @@ jobs:
 
           $SwiftBin = $SwiftExecutable.DirectoryName
           $env:Path = "$SwiftBin;$env:Path"
-          $SwiftBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:Path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8
+          Get-ChildItem Env: | ForEach-Object {
+              "$($_.Name)=$($_.Value)" |
+                  Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
           & $SwiftExecutable.FullName --version
+          & $SwiftExecutable.FullName -print-target-info
 
       - name: Verify M1 on Windows
         shell: pwsh
