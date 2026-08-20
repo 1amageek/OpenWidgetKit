@@ -379,6 +379,10 @@ try {
     if ($env:OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER -ne $Configuration.build.swiftToolchainIdentifier) {
         throw "Swift toolchain provenance mismatch: $env:OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER"
     }
+    if (-not $env:OPENWIDGET_SWIFT_INSTALLER_SHA256 `
+        -or $env:OPENWIDGET_SWIFT_INSTALLER_SHA256 -notmatch '^[A-F0-9]{64}$') {
+        throw "OPENWIDGET_SWIFT_INSTALLER_SHA256 must identify the verified Swift installer."
+    }
     $SwiftVersion = (& swift --version | Out-String).Trim()
     if (-not $SwiftVersion.Contains("Swift version 6.4-dev")) {
         throw "The configured Swift 6.4 development snapshot is not active: $SwiftVersion"
@@ -580,12 +584,18 @@ try {
         } | Sort-Object Path
 
     $Evidence = [PSCustomObject]@{
-        SchemaVersion = 2
+        SchemaVersion = 3
         Architecture = $Architecture
         SwiftTriple = $SwiftTriple
         SwiftVersion = $SwiftVersion
         SwiftSnapshot = $Configuration.build.swiftSnapshot
         SwiftToolchainIdentifier = $Configuration.build.swiftToolchainIdentifier
+        SwiftInstallerSHA256 = $env:OPENWIDGET_SWIFT_INSTALLER_SHA256
+        RunnerImage = $env:ImageOS
+        RunnerImageVersion = $env:ImageVersion
+        GitHubRepository = $env:GITHUB_REPOSITORY
+        GitHubRunID = $env:GITHUB_RUN_ID
+        GitHubHeadSHA = $env:GITHUB_SHA
         WindowsAppSDKVersion = $Configuration.build.windowsAppSDKVersion
         WidgetsPackageVersion = $Configuration.build.widgetsPackageVersion
         CppWinRTVersion = $Configuration.build.cppWinRTVersion

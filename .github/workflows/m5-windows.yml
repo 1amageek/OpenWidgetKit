@@ -108,9 +108,12 @@ jobs:
               -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $env:OPENWIDGET_SWIFT_SNAPSHOT = $Snapshot
           $env:OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER = $Snapshot
+          $env:OPENWIDGET_SWIFT_INSTALLER_SHA256 = $ActualSHA256
           "OPENWIDGET_SWIFT_SNAPSHOT=$Snapshot" | Out-File `
               -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER=$Snapshot" | Out-File `
+              -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENWIDGET_SWIFT_INSTALLER_SHA256=$ActualSHA256" | Out-File `
               -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & $SwiftExecutable.FullName --version
 
