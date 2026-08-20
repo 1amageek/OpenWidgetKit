@@ -244,20 +244,22 @@ executes the gate, and uploads the JSON evidence. The workflow is dispatch-only.
 
 ## Evidence status
 
-As of 2026-08-20, the pinned Apple API fixtures, including the M2/M3 source
+As of 2026-08-21, the pinned Apple API fixtures, including the M2/M3 source
 surface, typecheck for macOS 11, iOS 14, watchOS 9, and visionOS 26, and the
-replacement checks pass on the local arm64 macOS host. All 44 focused M2/M3
-Native behavior test declarations pass. The 15 M4/M5 host-neutral Native test
-declarations also pass, and the normal WASM API, behavior, and M4 targets build
-with the pinned Swift 6.4 snapshot. The Windows evidence below remains the M1
-baseline and does not yet cover M2-M5.
+replacement checks pass on the local arm64 macOS host. All 50 focused M1-M3,
+12 M4, and 13 M5 Native test declarations pass, and the normal WASM API,
+behavior, and M4 targets build with the pinned Swift 6.4 snapshot. The M5
+Windows gate additionally compiles the package test graph on native x64 and
+ARM64 runners; it does not execute those behavior tests on Windows.
 
 The pinned Windows gate passed on the `win25-vs2026` x86_64 runner in
-[GitHub Actions run 32320007986](https://github.com/1amageek/OpenWidgetKit/actions/runs/32320007986)
-at head `b8a2c3f150ccf6a764bda60e2e432f5bc763b333`. It compiled both replacement
+[GitHub Actions run 32387237114](https://github.com/1amageek/OpenWidgetKit/actions/runs/32387237114)
+at head `9b8386182b32d7ee970d57d8a453223c6386895e`. It compiled both replacement
 fixtures, executed the differential behavior fixture, observed the required
 non-`Sendable` rejection, and recorded the effective Foundation module and
 runtime DLL hashes. The normalized evidence and raw artifact digest are stored
 in `Verification/M1_WINDOWS_EVIDENCE.json`. These checks complete the M1 API
-inventory and compatibility-fixture milestone. They do not establish Windows
-Widgets Board behavior, which belongs to M6.
+inventory and compatibility-fixture milestone. The M5 x64/ARM64 build, link,
+runtime-closure, and MSIX evidence is stored in
+`Verification/M5_WINDOWS_EVIDENCE.json`. Neither gate establishes Windows COM
+activation or Widgets Board behavior, which belongs to M6.

@@ -217,6 +217,10 @@ x64は`rtl.shared.amd64.msm`、ARM64は`rtl.shared.arm64.msm`を使用します�
 `Foundation`、`FoundationEssentials`、`FoundationInternationalization`、Swift runtime DLLを混在させません。
 最終executableとbridgeから辿るSwift/Foundation dependency closureがmerge module内で閉じることも検証します。
 
+buildはcross compilationではなく、x64を`windows-2025-vs2026`、ARM64を
+`windows-11-vs2026-arm`で実行します。各jobは同じarchitectureのSwift installer、Swift host triple、
+Visual Studio host/target environmentを要求し、いずれかが不一致ならpackage生成前に失敗します。
+
 Windows Providerでは`FoundationEssentials`を直接選択しません。Embedded deploymentの軽量化は
 OpenFoundationがFoundation familyを完全に外す別分岐で扱い、Windows Providerへ混在させません。
 
@@ -227,6 +231,8 @@ M5 source baselineは次の通りです。
 | Component | Pin |
 |---|---|
 | Swift Windows | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a` |
+| x64 Swift installer SHA-256 | `17D5EBA8DFDC9E99BF13C0F26169022BE2F816B19E66D883A596D3512CFB0A04` |
+| ARM64 Swift installer SHA-256 | `ABD104FCF75A4D5A33E4505E54E30E0C2FFDB62FB9E28BA72DAD7AB0363BE62A` |
 | Windows App SDK | `2.3.1` |
 | Widgets NuGet package | `2.0.5` |
 | C++/WinRT NuGet package | `2.0.230706.1` |
@@ -263,9 +269,9 @@ Windows App SDKの`latest`だけを記録して再現性があると扱っては
 ## Verification checklist
 
 - [ ] callback objectをscope外に保持しないことをcode reviewで確認
-- [ ] Apple/WindowsでFoundation geometryを含む同一source fixtureがcompileする
-- [ ] OpenFoundationを正本とするOpenCoreGraphicsとOpenWidgetKitのCFCG値が変換なしで受け渡せる
-- [ ] Providerと同じtoolchain由来のFoundation/runtime libraryだけをMSIXへ含める
+- [x] Apple/WindowsでFoundation geometryを含む同一source fixtureがcompileする
+- [x] OpenFoundationを正本とするOpenCoreGraphicsとOpenWidgetKitのCFCG値が変換なしで受け渡せる
+- [x] Providerと同じtoolchain由来のFoundation/runtime libraryだけをMSIXへ含める
 - [ ] C++ exceptionがABIを越えないことをfailure fixtureで確認
 - [ ] JSON bufferがsuccess/failure/shutdownでexactly once解放される
 - [ ] x64/arm64でCOM activationが成功する
@@ -277,5 +283,5 @@ Windows App SDKの`latest`だけを記録して再現性があると扱っては
 - [ ] delete/recreate時にold generationを拒否しcomplete templateを再送する
 - [ ] `Action.Execute`の正常/未知/期限切れactionを検証する
 - [ ] malformed JSONとhost rejectionを失敗として観測する
-- [ ] manifest/runtime metadata driftを自動検出する
+- [x] manifest/runtime metadata driftを自動検出する
 - [ ] process shutdown後にtask、callback、COM referenceが残らない

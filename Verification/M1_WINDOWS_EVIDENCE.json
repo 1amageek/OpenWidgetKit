@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "verification": {
-    "date": "2026-08-20",
+    "date": "2026-08-21",
     "repository": "1amageek/OpenWidgetKit",
-    "runID": "32320007986",
-    "runURL": "https://github.com/1amageek/OpenWidgetKit/actions/runs/32320007986",
-    "headSHA": "b8a2c3f150ccf6a764bda60e2e432f5bc763b333",
+    "runID": "32387237114",
+    "runURL": "https://github.com/1amageek/OpenWidgetKit/actions/runs/32387237114",
+    "headSHA": "9b8386182b32d7ee970d57d8a453223c6386895e",
     "rawArtifactName": "m1-windows-evidence",
-    "rawArtifactFileSHA256": "FEEBBDD671A419919E2DEB5F334E016F7C542B9A3A2124A6139BAC7E80CF12FB",
+    "rawArtifactFileSHA256": "450268480531836762F75FC7EF53A975B3B56A2ADDA57E72BD091B1BFF9AA3C5",
     "runnerImage": "win25-vs2026",
     "runnerImageVersion": "20260810.198.2"
   },
   "toolchain": {
-    "snapshot": "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a",
-    "compilerTag": "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a",
-    "compilerCommit": "db4e13695491982c8de74c36c5efb75bbc715987",
-    "compilerVersion": "Swift version 6.4-dev (LLVM 885b338ea38aee1, Swift db4e13695491982)",
-    "installerSHA256": "C287DD533A65A73D657B1B9F2305BE50552F89B46199A0F6162A287DEE547149",
+    "snapshot": "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a",
+    "compilerTag": "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a",
+    "compilerCommit": "424cae54c1a10da79456ce66f330e6639439368f",
+    "compilerVersion": "Swift version 6.4-dev (LLVM a157c5eb1c32510, Swift 424cae54c1a10da)",
+    "installerSHA256": "17D5EBA8DFDC9E99BF13C0F26169022BE2F816B19E66D883A596D3512CFB0A04",
     "target": "x86_64-unknown-windows-msvc",
     "pointerWidthInBits": 64,
     "sdkRootSuffix": "Platforms/6.4.0/Windows.platform/Developer/SDKs/Windows.sdk"
@@ -35,55 +35,55 @@
   "effectiveX86_64DynamicModuleArtifacts": [
     {
       "pathSuffix": "Platforms/6.4.0/Windows.platform/Developer/SDKs/Windows.sdk/usr/lib/swift/windows/Foundation.swiftmodule/x86_64-unknown-windows-msvc.swiftdoc",
-      "sha256": "7BE6E909C6D1A699EDC89B962110113546D625A27B5058B3D198C6AAF96DF305"
+      "sha256": "5A5B3E98708070C9EB238D9B6237182D7DF1BBED82329A526AD041F943B1AE8A"
     },
     {
       "pathSuffix": "Platforms/6.4.0/Windows.platform/Developer/SDKs/Windows.sdk/usr/lib/swift/windows/Foundation.swiftmodule/x86_64-unknown-windows-msvc.swiftmodule",
-      "sha256": "AF6DDE0C67CE63287A4763482C1B9AD31635775FE294DA92E58DCDB499850A50"
+      "sha256": "0FE2E19B8C1B788483D68B578919504E8FDBF78834FD4911A35E654F7ED50971"
     },
     {
       "pathSuffix": "Platforms/6.4.0/Windows.platform/Developer/SDKs/Windows.sdk/usr/lib/swift/windows/FoundationEssentials.swiftmodule/x86_64-unknown-windows-msvc.swiftdoc",
-      "sha256": "8590EB98414A1858B1212C5854423C0BDA77944F73CE55232068ED045D0EB56B"
+      "sha256": "4DF88590C55A27D7098CECBB0C98146318587AA05A4B1F8B0F8136C2F80A5D97"
     },
     {
       "pathSuffix": "Platforms/6.4.0/Windows.platform/Developer/SDKs/Windows.sdk/usr/lib/swift/windows/FoundationEssentials.swiftmodule/x86_64-unknown-windows-msvc.swiftmodule",
-      "sha256": "4CAE439264E6F580603D287185096D924F80E71900D98D3A6B9E499B5C399B00"
+      "sha256": "1F481FDFFD38E360CB56B8486735D9C5A6E0A4A843AB2DD6B475E49D68539C92"
     },
     {
       "pathSuffix": "Platforms/6.4.0/Windows.platform/Developer/SDKs/Windows.sdk/usr/lib/swift/windows/FoundationInternationalization.swiftmodule/x86_64-unknown-windows-msvc.swiftdoc",
-      "sha256": "E24858D6DFF158922C222E1C3B2924251F39ABF75C6AFBE1C68EC07B2DA41CFB"
+      "sha256": "D0233E9BF40AFD16C6C18C58221BC22174D898C5C62D31ECEC82FA4C13AD33E3"
     },
     {
       "pathSuffix": "Platforms/6.4.0/Windows.platform/Developer/SDKs/Windows.sdk/usr/lib/swift/windows/FoundationInternationalization.swiftmodule/x86_64-unknown-windows-msvc.swiftmodule",
-      "sha256": "4B31160840E327463B4CBAC2DD337B07AFFBAEA57051C03B39A1DC27394D9B23"
+      "sha256": "0B92BD0ACA47ED90D247479B7047A2EBF472222FFBBFCBC2127657DB74254FFC"
     }
   ],
   "runtimeDLLArtifacts": [
     {
       "pathSuffix": "Runtimes/6.4.0/usr/bin/Foundation.dll",
-      "sha256": "0AF4ED67B255520B6C5041A30C3E7511AAE69EA07442C9451D3404295A3A7158"
+      "sha256": "F8F8CB01D10BA2333B5161921A13ACBE532C788736D8692D3B71908B8EA669D8"
     },
     {
       "pathSuffix": "Runtimes/6.4.0/usr/bin/FoundationEssentials.dll",
-      "sha256": "559F16A27FF1CC6813CB5371740E97527C69FE570D1577BE56F2957EE1074D8E"
+      "sha256": "D4E7C9E4DA04FC0A2AD3D623FED2B73626321047940649A5338CDA8F723DE79B"
     },
     {
       "pathSuffix": "Runtimes/6.4.0/usr/bin/FoundationInternationalization.dll",
-      "sha256": "3CBA92886BAB3711A248EF43324FA043E14302DBF92E34BBEA393D65D5C6EF47"
+      "sha256": "811213F7569995F6EEC6F1262692ABE428D0A6531F5F2DE33AC3AF5E65B153AB"
     }
   ],
   "toolchainDLLCopies": [
     {
       "pathSuffix": "Toolchains/6.4.0+Asserts/usr/bin/Foundation/Foundation.dll",
-      "sha256": "0AF4ED67B255520B6C5041A30C3E7511AAE69EA07442C9451D3404295A3A7158"
+      "sha256": "F8F8CB01D10BA2333B5161921A13ACBE532C788736D8692D3B71908B8EA669D8"
     },
     {
       "pathSuffix": "Toolchains/6.4.0+Asserts/usr/bin/FoundationEssentials/FoundationEssentials.dll",
-      "sha256": "559F16A27FF1CC6813CB5371740E97527C69FE570D1577BE56F2957EE1074D8E"
+      "sha256": "D4E7C9E4DA04FC0A2AD3D623FED2B73626321047940649A5338CDA8F723DE79B"
     },
     {
       "pathSuffix": "Toolchains/6.4.0+Asserts/usr/bin/FoundationInternationalization/FoundationInternationalization.dll",
-      "sha256": "3CBA92886BAB3711A248EF43324FA043E14302DBF92E34BBEA393D65D5C6EF47"
+      "sha256": "811213F7569995F6EEC6F1262692ABE428D0A6531F5F2DE33AC3AF5E65B153AB"
     }
   ]
 }

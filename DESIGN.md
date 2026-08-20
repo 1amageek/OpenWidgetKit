@@ -4,8 +4,9 @@
 
 この文書はOpenWidgetKitの規範アーキテクチャです。現在はM2 semantic document、host-neutral M3 runtime、
 M4 Adaptive Cards compiler、M5 Windows host/package sourceまで実装されています。M4はNative testと通常WASM
-target build、M5のhost-neutral Swift surfaceはNative testを通過しました。C++/WinRTのx64/ARM64 build/linkと
-Windows runtime検証は未実行です。確認済み事実、
+target build、M5のhost-neutral Swift surfaceはNative testを通過しました。M5のSwift executable、
+C++/WinRT bridge、公式Swift/Foundation runtime closure、unsigned MSIXはnative x64/ARM64 gateを通過しました。
+COM activationとWidgets Board runtime検証は未実行です。確認済み事実、
 目標設計、必要な変更、未解決事項を
 区別して記載します。
 
@@ -233,9 +234,9 @@ OpenWidgetKitは`FoundationEssentials`を直接採用しません。full Windows
 公開SwiftUI/WidgetKitのためにFoundation umbrellaを必要とし、EmbeddedではOpenFoundationが
 Foundation familyを完全に外すためです。
 
-Windows配布では、host runtime directoryやSDK全体から同名DLLを探索しません。Swift Windows
-toolchainはhost architectureのruntimeだけを通常配置し、cross-target runtimeはSDK同梱の
-redistributable merge moduleを正本にするためです。M5は固定installerに含まれるSwift 6.4の
+Windows配布では、host runtime directoryやSDK全体から同名DLLを探索しません。x64とARM64を
+それぞれ同じarchitectureのnative Windows runnerとSwift installerでbuildし、SDK同梱の
+redistributable merge moduleをruntimeの正本にします。M5は固定installerに含まれるSwift 6.4の
 `rtl.shared.amd64.msm`または`rtl.shared.arm64.msm`のembedded cabinetを、producerと同じ
 WiX 4.0.5で直接展開し、application-privateなruntimeとしてMSIXへ含めます。ここで`shared`は
 dynamic Swift linkageを表し、machine-wideな
@@ -340,17 +341,17 @@ sequenceDiagram
 ## Shared-state and ownership review matrix
 
 M2/M3のshared sourceにはEmbedded分岐、raw-state fallback、no-op lockはありません。Windows列は同じ
-source contractを示しますが、M2/M3のWindows compile/runtime gateは未実行です。
+source contractを示します。M2/M3のWindows compile gateはx64/ARM64で通過し、runtime behaviorは未実行です。
 
 | Logical state | Native storage/isolation | normal WASM | Windows contract | Read/mutation entry | Shutdown/release |
 |---|---|---|---|---|---|
-| runtime instances, activity, and lifetime generations | `WidgetRuntimeService` actor with generation tombstones | same actor | same actor; target verification pending | actor methods only | deactivation cancels scheduled work; deletion retains the last generation; shutdown removes instances |
-| provider request terminal state | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; verification pending | `claimProviderCallback` and exactly-once `complete` | timeout task cancelled and continuation resumed once |
-| provider callback value handoff | `Mutex<Payload>` one-shot owner | same owner | same owner; verification pending | callback installs, MainActor consumes once | payload cleared on take; late/duplicate callback rejected |
-| runtime composition | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; verification pending | install/current/uninstall composition functions | uninstall clears both references |
-| view identity map | `WidgetIdentityStore` on `MainActor` | same isolation | same isolation; verification pending | one transaction spans every entry and environment variant in a requested timeline | unused identities are pruned only after complete success; any failed nested evaluation rolls back; remaining state is released with the widget instance |
-| semantic document/resources | immutable `Sendable` values | same values | same values; verification pending | constructed on `MainActor`, read by runtime/host | value lifetime; no external handle |
-| host generation fence | test host uses actor state | protocol contract only | `WindowsAdaptiveCardHost` actor plus C++ operation fence; target verification pending | invalidate/apply/remove | removal rejects updates through its generation; a later lifetime requires a strictly newer generation and a complete template |
+| runtime instances, activity, and lifetime generations | `WidgetRuntimeService` actor with generation tombstones | same actor | same actor; x64/ARM64 compiled, runtime pending | actor methods only | deactivation cancels scheduled work; deletion retains the last generation; shutdown removes instances |
+| provider request terminal state | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; x64/ARM64 compiled, runtime pending | `claimProviderCallback` and exactly-once `complete` | timeout task cancelled and continuation resumed once |
+| provider callback value handoff | `Mutex<Payload>` one-shot owner | same owner | same owner; x64/ARM64 compiled, runtime pending | callback installs, MainActor consumes once | payload cleared on take; late/duplicate callback rejected |
+| runtime composition | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; x64/ARM64 compiled, runtime pending | install/current/uninstall composition functions | uninstall clears both references |
+| view identity map | `WidgetIdentityStore` on `MainActor` | same isolation | same isolation; x64/ARM64 compiled, runtime pending | one transaction spans every entry and environment variant in a requested timeline | unused identities are pruned only after complete success; any failed nested evaluation rolls back; remaining state is released with the widget instance |
+| semantic document/resources | immutable `Sendable` values | same values | same values; x64/ARM64 compiled, runtime pending | constructed on `MainActor`, read by runtime/host | value lifetime; no external handle |
+| host generation fence | test host uses actor state | protocol contract only | `WindowsAdaptiveCardHost` actor plus C++ operation fence; x64/ARM64 built, runtime pending | invalidate/apply/remove | removal rejects updates through its generation; a later lifetime requires a strictly newer generation and a complete template |
 
 M4/M5で追加したstateはWindows adapter graphへ限定されます。Embedded SwiftはOpenWidgetKitの対応targetでは
 なく、Windows stateをraw storageへ置換する条件分岐もありません。
@@ -493,16 +494,13 @@ CFCG値identityはOpenFoundation、graphics operationとrenderingはOpenCoreGrap
 
 次は実装開始前または該当milestone前に決定します。
 
-1. Windows App SDK、Windows SDK、Swift Windows toolchain、Foundation link modeの固定version;
-2. x64/arm64の最小Windows version;
-3. SwiftPMとMSIX packaging projectの統合方法;
-4. manifest metadataをsourceから生成するか、宣言fileをsingle source of truthにするか;
-5. image resourceのhost取得方式とcache lifetime;
-6. localization bundleとWindows package resourceの対応;
-7. App Intents互換を別moduleにするか;
-8. package名/module名に関する商標・配布上の確認;
-9. 既存OpenSwiftUI projectからAPI fixtureまたは実装を取り込む範囲とlicense review。
-10. Embedded Widgetで使用するCFCG値surfaceのAPI/ABI互換fixture。
+1. manifestが現在要求するWindows 11 `10.0.22000.0`を実機で最小対応versionとして受け入れられるか;
+2. image resourceのhost取得方式とcache lifetime;
+3. localization bundleとWindows package resourceの対応;
+4. App Intents互換を別moduleにするか;
+5. package名/module名に関する商標・配布上の確認;
+6. 既存OpenSwiftUI projectからAPI fixtureまたは実装を取り込む範囲とlicense review;
+7. Embedded Widgetで使用するCFCG値surfaceのAPI/ABI互換fixture。
 
 未解決事項が公開API、所有権、host lifetimeを変える場合、その事項を解消するまで該当実装を
 開始しません。

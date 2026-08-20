@@ -43,13 +43,14 @@ deterministic MSIX manifest tooling.
 
 The M4 compiler passes 12 focused Native tests and builds for normal WASM with
 the pinned Swift 6.4 snapshot and matching SDK. The M5 Swift host and manifest
-surface passes 12 focused Native tests, including three consecutive warm runs
-of the target after the lifecycle review. These checks do not compile or execute
-the C++/WinRT provider. The previously verified Windows M1 baseline therefore
-does not prove the new provider, x64/ARM64 link, unsigned MSIX, or Widgets Board
-behavior. The checked-in `M5 Windows Provider Build` workflow is the target
-build gate; M6 remains the signed install and real Widgets Board acceptance
-milestone.
+surface passes 13 focused Native tests, including three consecutive warm runs
+of the target after the lifecycle review. The Windows M1 gate verifies the
+shared API, behavior, OpenFoundation identity, and dynamic Foundation runtime
+on x64. The M5 gate compiles the package test graph, Swift provider executable,
+and C++/WinRT bridge natively on both x64 and ARM64, then verifies the official
+architecture-matched Swift runtime closure and expanded unsigned MSIX. It does
+not activate COM or execute the provider in Widgets Board. Signed installation
+and real Widgets Board acceptance remain M6.
 
 The latest lifecycle review corrected or clarified inactive-state suppression,
 retained-content-aware recovery, monotonic
@@ -65,7 +66,7 @@ template compilation. Each cache entry retains the binding plan emitted by that
 same compilation, so cache hits reevaluate dynamic data and resource ownership
 without rebuilding the template tree or JSON and without independently
 reconstructing binding order. The accompanying regression tests pass as part of
-the 74-test Native suite.
+the 75-test Native suite.
 
 Package structure or import availability must not be treated as evidence of
 implementation completion. See
@@ -77,7 +78,7 @@ flowchart LR
     Provider["TimelineProvider"] --> Document["SwiftUI semantic document<br/>M2 implemented"]
     Document --> Scheduler["Generation-safe timeline runtime<br/>M3 implemented"]
     Scheduler --> Compiler["Adaptive Cards compiler<br/>M4 Native/WASM verified"]
-    Compiler --> Windows["Windows host and packaging<br/>M5 Native tests pass; Windows pending"]
+    Compiler --> Windows["Windows host and packaging<br/>M5 x64/ARM64 build and MSIX gate pass"]
     Windows --> Board["Widgets Board E2E<br/>M6 pending"]
 ```
 
@@ -91,6 +92,7 @@ flowchart LR
 | [WINDOWS_NOTES.md](WINDOWS_NOTES.md) | Windows-specific constraints for COM, MSIX, Adaptive Cards, callback lifetime, and related APIs |
 | [API_COMPATIBILITY.md](API_COMPATIBILITY.md) | Pinned Apple API inventory, M2/M3 compatibility surface, fixtures, and Windows M1 compile baseline |
 | [Verification/M1_WINDOWS_EVIDENCE.json](Verification/M1_WINDOWS_EVIDENCE.json) | Normalized pinned Windows toolchain, behavior, module, and runtime evidence for M1 |
+| [Verification/M5_WINDOWS_EVIDENCE.json](Verification/M5_WINDOWS_EVIDENCE.json) | Normalized x64/ARM64 Swift, C++/WinRT, runtime-closure, and MSIX build evidence for M5 |
 | [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | Ledger of unimplemented APIs, milestones, and verification evidence |
 
 ## Package boundary
@@ -256,6 +258,10 @@ MSIX.
 It validates the toolchain, NuGet graph, package configuration, official Swift
 redistributable and WiX provenance, generated manifest, and expanded MSIX
 contents. The workflow runs this script on
-the explicit `windows-2025-vs2026` image for both architectures. Signing,
-installation, gallery discovery, pinning, and visual behavior belong to M6 and
-are intentionally not reported by this build gate.
+`windows-2025-vs2026` with the x64 Swift installer and on
+`windows-11-vs2026-arm` with the ARM64 Swift installer. The build script
+requires the active Swift host triple and Visual Studio host architecture to
+match the package architecture, so this gate never substitutes cross-compiled
+output. Signing, installation, gallery discovery, pinning, COM activation, and
+visual behavior belong to M6 and are intentionally not reported by this build
+gate.
