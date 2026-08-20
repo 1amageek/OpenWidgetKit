@@ -60,18 +60,20 @@ function ConvertTo-BigEndianBytes {
 
 function Get-PNGCRC32 {
     param([byte[]]$Bytes)
-    [uint32]$CRC = 0xFFFFFFFF
+    # PowerShell interprets high-bit hexadecimal literals as signed Int32 values.
+    [uint32]$CRC = [uint32]::MaxValue
+    [uint32]$Polynomial = 3988292384
     foreach ($Byte in $Bytes) {
         $CRC = $CRC -bxor [uint32]$Byte
         for ($Bit = 0; $Bit -lt 8; $Bit += 1) {
             if (($CRC -band 1) -ne 0) {
-                $CRC = [uint32](($CRC -shr 1) -bxor [uint32]0xEDB88320)
+                $CRC = [uint32](($CRC -shr 1) -bxor $Polynomial)
             } else {
                 $CRC = [uint32]($CRC -shr 1)
             }
         }
     }
-    return [uint32]($CRC -bxor [uint32]0xFFFFFFFF)
+    return [uint32]($CRC -bxor [uint32]::MaxValue)
 }
 
 function Write-PNGChunk {
