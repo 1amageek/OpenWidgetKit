@@ -230,12 +230,16 @@ M5 source baselineは次の通りです。
 | Windows App SDK | `2.3.1` |
 | Widgets NuGet package | `2.0.5` |
 | C++/WinRT NuGet package | `2.0.230706.1` |
-| WiX Toolset SDK | `7.0.0` |
+| WiX Toolset SDK | `4.0.5` |
 | Adaptive Cards host template | `1.6` |
 | Visual C++ toolset | `v145` |
 | Windows SDK | `10.0.26100.0` |
 | architectures | `x64`, `arm64` |
-| Foundation link mode | dynamic, official private redistributable merge module |
+| Foundation link mode | dynamic, app-private installation from official `rtl.shared` merge module |
+
+WiX 4.0.5 matches the SDK used to produce Swift 6.4's redistributable merge
+modules and does not require CI to accept the maintenance-fee EULA introduced
+by later WiX releases. The restored NuGet package is SHA-256 pinned before use.
 
 Swift Provider executableがpackaged appを所有します。C++/WinRT bridge DLLへ
 `WindowsAppSDKSelfContained`を適用せず、生成manifestが

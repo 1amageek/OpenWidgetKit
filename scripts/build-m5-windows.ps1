@@ -294,7 +294,7 @@ function Expand-SwiftRuntimeRedistributable {
         throw "The pinned WiX Toolset SDK package was not restored."
     }
     $WixPackageHash = (Get-FileHash -Algorithm SHA256 -Path $WixPackagePath).Hash
-    if ($WixPackageHash -ne "AF8F72FB2550E9C2CF00B6EAF5E3ED811514AA2B3F344DFA342540AF39676979") {
+    if ($WixPackageHash -ne "917009BEF10F430EE72C4401F70FFCB36562A53F41EA027B8DCACBA5E9886A6F") {
         throw "WiX Toolset SDK package hash mismatch: $WixPackageHash"
     }
     $RuntimeMSIs = @(
