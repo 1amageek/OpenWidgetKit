@@ -236,6 +236,12 @@ gate verifies exact NuGet hashes and discovers Swift/Foundation DLLs from the
 final executable and that same toolchain; it rejects mixed copies rather than
 using an unrelated fixed DLL directory.
 
+The Swift provider executable owns the packaged application. The C++/WinRT
+bridge remains a class library, and the generated manifest declares a
+framework-package dependency on `Microsoft.WindowsAppRuntime.2` version
+2.3.1.0 or later. The package gate verifies that dependency after expanding the
+MSIX.
+
 ## Windows provider build gate
 
 `scripts/build-m5-windows.ps1` builds an unsigned x64 or ARM64 provider package.

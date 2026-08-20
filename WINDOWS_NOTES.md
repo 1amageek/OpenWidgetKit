@@ -232,6 +232,11 @@ M5 source baselineは次の通りです。
 | architectures | `x64`, `arm64` |
 | Foundation link mode | dynamic, discovered from final executable |
 
+Swift Provider executableがpackaged appを所有します。C++/WinRT bridge DLLへ
+`WindowsAppSDKSelfContained`を適用せず、生成manifestが
+`Microsoft.WindowsAppRuntime.2` version 2.3.1.0以上をframework package dependencyとして宣言します。
+Widgets runtime DLLはこのWindows package graphから解決します。
+
 baseline更新時に次を固定して記録します。
 
 - Swift Windows toolchain version and compiler commit;

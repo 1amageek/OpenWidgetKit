@@ -5,6 +5,7 @@ package struct WindowsPackageManifestGenerator: Sendable {
         configuration: OpenWidgetProviderConfiguration
     ) -> String {
         let provider = configuration.provider
+        let build = configuration.build
         let classID = provider.classID.dropFirst().dropLast()
         let definitions = configuration.definitions.map { definition in
             let capabilities = definition.families.map { family in
@@ -48,6 +49,7 @@ package struct WindowsPackageManifestGenerator: Sendable {
           </Properties>
           <Dependencies>
             <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+            <PackageDependency Name="\(xml(build.windowsAppRuntimePackageName))" Publisher="\(xml(build.windowsAppRuntimePublisher))" MinVersion="\(xml(build.windowsAppRuntimeMinVersion))" />
           </Dependencies>
           <Resources>
             <Resource Language="x-generate" />

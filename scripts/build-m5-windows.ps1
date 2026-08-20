@@ -310,7 +310,8 @@ try {
     foreach ($ExpectedPackage in @(
         "Microsoft.WindowsAppSDK/$($Configuration.build.windowsAppSDKVersion)",
         "Microsoft.WindowsAppSDK.Widgets/$($Configuration.build.widgetsPackageVersion)",
-        "Microsoft.Windows.CppWinRT/$($Configuration.build.cppWinRTVersion)"
+        "Microsoft.Windows.CppWinRT/$($Configuration.build.cppWinRTVersion)",
+        "Microsoft.WindowsAppSDK.Runtime/$($Configuration.build.windowsAppSDKVersion)"
     )) {
         if (-not $Assets.libraries.ContainsKey($ExpectedPackage)) {
             throw "NuGet resolved an unexpected Windows App SDK graph; missing $ExpectedPackage."
@@ -333,6 +334,10 @@ try {
         @{
             Path = Join-Path $NuGetRoot "microsoft.windows.cppwinrt\$($Configuration.build.cppWinRTVersion)\microsoft.windows.cppwinrt.$($Configuration.build.cppWinRTVersion).nupkg"
             SHA256 = "A99ECA1C244DD730B31554E6D4850E685F40BFB7CB0BD1CFB1561169FC3B692B"
+        },
+        @{
+            Path = Join-Path $NuGetRoot "microsoft.windowsappsdk.runtime\$($Configuration.build.windowsAppSDKVersion)\microsoft.windowsappsdk.runtime.$($Configuration.build.windowsAppSDKVersion).nupkg"
+            SHA256 = "F15C6C682A81A019E13BEAEE512DE9FB83FFD5A1F3E83B99209B6860A7AEBBA2"
         }
     )
     foreach ($Package in $PinnedPackages) {
@@ -393,6 +398,23 @@ try {
             throw "The expanded MSIX is missing '$RelativePath'."
         }
     }
+    $ExpandedManifestPath = Join-Path $InspectionDirectory "AppxManifest.xml"
+    [xml]$ExpandedManifest = Get-Content -Raw $ExpandedManifestPath
+    $ManifestNamespaces = [Xml.XmlNamespaceManager]::new($ExpandedManifest.NameTable)
+    $ManifestNamespaces.AddNamespace(
+        "foundation",
+        "http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    )
+    $RuntimeDependency = $ExpandedManifest.SelectSingleNode(
+        "/foundation:Package/foundation:Dependencies/foundation:PackageDependency",
+        $ManifestNamespaces
+    )
+    if ($null -eq $RuntimeDependency `
+        -or $RuntimeDependency.GetAttribute("Name") -ne $Configuration.build.windowsAppRuntimePackageName `
+        -or $RuntimeDependency.GetAttribute("Publisher") -ne $Configuration.build.windowsAppRuntimePublisher `
+        -or $RuntimeDependency.GetAttribute("MinVersion") -ne $Configuration.build.windowsAppRuntimeMinVersion) {
+        throw "The expanded MSIX has an unexpected Windows App Runtime dependency."
+    }
     $PackageFiles = Get-ChildItem -Path $InspectionDirectory -File -Recurse |
         ForEach-Object {
             [PSCustomObject]@{
@@ -414,6 +436,11 @@ try {
         WindowsAppSDKVersion = $Configuration.build.windowsAppSDKVersion
         WidgetsPackageVersion = $Configuration.build.widgetsPackageVersion
         CppWinRTVersion = $Configuration.build.cppWinRTVersion
+        WindowsAppRuntimeDependency = [PSCustomObject]@{
+            Name = $Configuration.build.windowsAppRuntimePackageName
+            Publisher = $Configuration.build.windowsAppRuntimePublisher
+            MinVersion = $Configuration.build.windowsAppRuntimeMinVersion
+        }
         VisualCToolset = $Configuration.build.visualCToolset
         WindowsSDKVersion = $Configuration.build.windowsSDKVersion
         FoundationLinkMode = $Configuration.build.foundationLinkMode

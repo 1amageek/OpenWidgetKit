@@ -126,13 +126,16 @@ struct WindowsWidgetProviderControllerTests {
 
     private func controllerConfiguration() -> OpenWidgetProviderConfiguration {
         OpenWidgetProviderConfiguration(
-            schemaVersion: 3,
+            schemaVersion: 4,
             build: WindowsWidgetBuildConfiguration(
                 swiftSnapshot: "snapshot",
                 swiftToolchainIdentifier: "toolchain",
                 windowsAppSDKVersion: "2.3.1",
                 widgetsPackageVersion: "2.0.5",
                 cppWinRTVersion: "2.0.230706.1",
+                windowsAppRuntimePackageName: "Microsoft.WindowsAppRuntime.2",
+                windowsAppRuntimePublisher: "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                windowsAppRuntimeMinVersion: "2.3.1.0",
                 visualCToolset: "v145",
                 windowsSDKVersion: "10.0.26100.0",
                 foundationLinkMode: "dynamic"

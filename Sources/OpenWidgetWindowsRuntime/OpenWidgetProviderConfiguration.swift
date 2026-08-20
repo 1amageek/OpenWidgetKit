@@ -44,7 +44,7 @@ package struct OpenWidgetProviderConfiguration: Codable, Equatable, Sendable {
     }
 
     package func validateMetadata() throws {
-        guard schemaVersion == 3 else {
+        guard schemaVersion == 4 else {
             throw WindowsWidgetHostError.invalidConfiguration(
                 "Unsupported provider configuration schema '\(schemaVersion)'."
             )
@@ -169,6 +169,9 @@ package struct WindowsWidgetBuildConfiguration: Codable, Equatable, Sendable {
     package let windowsAppSDKVersion: String
     package let widgetsPackageVersion: String
     package let cppWinRTVersion: String
+    package let windowsAppRuntimePackageName: String
+    package let windowsAppRuntimePublisher: String
+    package let windowsAppRuntimeMinVersion: String
     package let visualCToolset: String
     package let windowsSDKVersion: String
     package let foundationLinkMode: String
@@ -183,9 +186,24 @@ package struct WindowsWidgetBuildConfiguration: Codable, Equatable, Sendable {
         guard Self.isDottedVersion(windowsAppSDKVersion, componentCount: 3),
               Self.isDottedVersion(widgetsPackageVersion, componentCount: 3),
               Self.isDottedVersion(cppWinRTVersion, componentCount: 4),
+              Self.isDottedVersion(windowsAppRuntimeMinVersion, componentCount: 4),
               Self.isDottedVersion(windowsSDKVersion, componentCount: 4) else {
             throw WindowsWidgetHostError.invalidConfiguration(
                 "Windows SDK and NuGet pins must use fixed numeric versions."
+            )
+        }
+        guard Self.isBuildToken(windowsAppRuntimePackageName),
+              !windowsAppRuntimePublisher.isEmpty else {
+            throw WindowsWidgetHostError.invalidConfiguration(
+                "The Windows App Runtime dependency identity is invalid."
+            )
+        }
+        let appRuntimeMajor = windowsAppSDKVersion.split(separator: ".")[0]
+        guard windowsAppRuntimePackageName == "Microsoft.WindowsAppRuntime.\(appRuntimeMajor)",
+              windowsAppRuntimePublisher == "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+              windowsAppRuntimeMinVersion == "\(windowsAppSDKVersion).0" else {
+            throw WindowsWidgetHostError.invalidConfiguration(
+                "The Windows App Runtime dependency must match the Windows App SDK pin."
             )
         }
         guard visualCToolset.first == "v",
@@ -446,7 +464,9 @@ private enum OpenWidgetConfigurationKeyValidator {
             allowed: [
                 "swiftSnapshot", "swiftToolchainIdentifier", "windowsAppSDKVersion",
                 "widgetsPackageVersion", "cppWinRTVersion", "visualCToolset",
-                "windowsSDKVersion", "foundationLinkMode"
+                "windowsAppRuntimePackageName", "windowsAppRuntimePublisher",
+                "windowsAppRuntimeMinVersion", "windowsSDKVersion",
+                "foundationLinkMode"
             ],
             path: "$.build"
         )

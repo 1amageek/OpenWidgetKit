@@ -127,7 +127,10 @@ flowchart LR
     Config --> Manifest["AppxManifest generator"]
 ```
 
-Schema 3の`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
+Schema 4の`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
+M5のSwift executableがpackaged appのownerであり、C++/WinRT bridge DLLはself-contained appではありません。
+生成manifestは`Microsoft.WindowsAppRuntime.2` version 2.3.1.0以上を明示的に要求し、Widgets DLLを含む
+framework packageはWindows package graphが解決します。
 Bundled resourceはpackage-relative `path`だけを保存し、`ms-appx:///` URIはresolverがそのpathから
 導出します。WindowsがURIをpercent-decodeした後に別のpathへ正規化しないよう、resource pathは
 ASCIIのunreserved文字と`/`だけに制限します。

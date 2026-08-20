@@ -42,6 +42,8 @@ struct WindowsPackageManifestTests {
             manifest.components(separatedBy: "<Capability>").count - 1 == 2
         )
         #expect(manifest.contains(#"ProcessorArchitecture="x64""#))
+        #expect(manifest.contains(#"PackageDependency Name="Microsoft.WindowsAppRuntime.2""#))
+        #expect(manifest.contains(#"MinVersion="2.3.1.0""#))
         #expect(manifest.contains(#"IgnorableNamespaces="uap uap3 com rescap""#))
         #expect(configuration.resources.first?.uri == "ms-appx:///Assets/icon.png")
     }
@@ -92,15 +94,39 @@ struct WindowsPackageManifestTests {
         }
     }
 
+    @Test
+    func rejectsWindowsAppRuntimeDependencyVersionDrift() {
+        let build = WindowsWidgetBuildConfiguration(
+            swiftSnapshot: "snapshot",
+            swiftToolchainIdentifier: "toolchain",
+            windowsAppSDKVersion: "2.3.1",
+            widgetsPackageVersion: "2.0.5",
+            cppWinRTVersion: "2.0.230706.1",
+            windowsAppRuntimePackageName: "Microsoft.WindowsAppRuntime.2",
+            windowsAppRuntimePublisher: "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+            windowsAppRuntimeMinVersion: "2.3.0.0",
+            visualCToolset: "v145",
+            windowsSDKVersion: "10.0.26100.0",
+            foundationLinkMode: "dynamic"
+        )
+
+        #expect(throws: WindowsWidgetHostError.self) {
+            try build.validate()
+        }
+    }
+
     private func fixtureConfiguration() -> OpenWidgetProviderConfiguration {
         OpenWidgetProviderConfiguration(
-            schemaVersion: 3,
+            schemaVersion: 4,
             build: WindowsWidgetBuildConfiguration(
                 swiftSnapshot: "snapshot",
                 swiftToolchainIdentifier: "toolchain",
                 windowsAppSDKVersion: "2.3.1",
                 widgetsPackageVersion: "2.0.5",
                 cppWinRTVersion: "2.0.230706.1",
+                windowsAppRuntimePackageName: "Microsoft.WindowsAppRuntime.2",
+                windowsAppRuntimePublisher: "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+                windowsAppRuntimeMinVersion: "2.3.1.0",
                 visualCToolset: "v145",
                 windowsSDKVersion: "10.0.26100.0",
                 foundationLinkMode: "dynamic"
