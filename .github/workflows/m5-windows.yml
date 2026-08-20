@@ -136,9 +136,17 @@ jobs:
           if (-not $VsInstall) {
               throw "Visual Studio 2026 with the required v145 target tools was not found."
           }
+          $TargetArchitecture = if ("${{ matrix.architecture }}" -eq "arm64") {
+              "arm64"
+          } else {
+              "x64"
+          }
           Import-Module (Join-Path $VsInstall "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
           Enter-VsDevShell -VsInstallPath $VsInstall -SkipAutomaticLocation `
-              -DevCmdArguments "-arch=x64 -host_arch=x64"
+              -DevCmdArguments "-arch=$TargetArchitecture -host_arch=x64"
+          if ($env:VSCMD_ARG_TGT_ARCH -ne $TargetArchitecture) {
+              throw "Visual Studio target architecture mismatch: $env:VSCMD_ARG_TGT_ARCH"
+          }
           ./scripts/build-m5-windows.ps1 `
               -Architecture "${{ matrix.architecture }}" `
               -OutputDirectory (Join-Path $env:RUNNER_TEMP "m5-${{ matrix.architecture }}")
