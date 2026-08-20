@@ -56,12 +56,17 @@ try {
     if (-not $ModuleSearchDirectories) {
         throw "No replacement Swift module search paths were found."
     }
-    $ClangModuleMaps = @(
-        Get-ChildItem -Path .build -Recurse -Filter module.modulemap -File |
+    $BridgeModuleMaps = @(
+        Get-ChildItem -Path .build -Recurse -Filter *.modulemap -File |
+            Where-Object {
+                (Get-Content -Raw -Path $_.FullName).Contains(
+                    "module COpenWidgetWindowsBridge"
+                )
+            } |
             Sort-Object FullName -Unique
     )
-    if (-not $ClangModuleMaps) {
-        throw "No replacement Clang module maps were found."
+    if (-not $BridgeModuleMaps) {
+        throw "The COpenWidgetWindowsBridge module map was not found."
     }
 
     $NegativeArguments = @(
@@ -73,12 +78,10 @@ try {
     foreach ($ModuleSearchDirectory in $ModuleSearchDirectories) {
         $NegativeArguments += @("-I", $ModuleSearchDirectory)
     }
-    foreach ($ModuleMap in $ClangModuleMaps) {
-        $NegativeArguments += @(
-            "-Xcc",
-            "-fmodule-map-file=$($ModuleMap.FullName)"
-        )
-    }
+    $NegativeArguments += @(
+        "-Xcc",
+        "-fmodule-map-file=$($BridgeModuleMaps[0].FullName)"
+    )
     $NegativeArguments += "Fixtures/NegativeAPI/TimelineReloadPolicySendable.swift"
 
     $NegativeOutput = (& swiftc @NegativeArguments 2>&1 | Out-String).Trim()

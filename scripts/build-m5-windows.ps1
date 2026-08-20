@@ -51,10 +51,10 @@ function Invoke-Checked {
 function ConvertTo-BigEndianBytes {
     param([uint32]$Value)
     return [byte[]]@(
-        ($Value -shr 24) -band 0xFF,
-        ($Value -shr 16) -band 0xFF,
-        ($Value -shr 8) -band 0xFF,
-        $Value -band 0xFF
+        [byte](($Value -shr 24) -band [uint32]0xFF)
+        [byte](($Value -shr 16) -band [uint32]0xFF)
+        [byte](($Value -shr 8) -band [uint32]0xFF)
+        [byte]($Value -band [uint32]0xFF)
     )
 }
 
