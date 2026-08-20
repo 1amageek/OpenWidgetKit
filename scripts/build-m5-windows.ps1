@@ -383,6 +383,10 @@ try {
     if (-not $SwiftVersion.Contains("Swift version 6.4-dev")) {
         throw "The configured Swift 6.4 development snapshot is not active: $SwiftVersion"
     }
+    $HostTargetInfo = & swift -print-target-info | ConvertFrom-Json
+    if ($HostTargetInfo.target.unversionedTriple -ne $SwiftTriple) {
+        throw "M5 requires a native Swift host matching $SwiftTriple; found $($HostTargetInfo.target.unversionedTriple)."
+    }
     $TargetInfo = & swift -print-target-info -target $SwiftTriple | ConvertFrom-Json
     if ($TargetInfo.target.unversionedTriple -ne $SwiftTriple) {
         throw "Swift target mismatch: $($TargetInfo.target.unversionedTriple)"
