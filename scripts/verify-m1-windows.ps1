@@ -127,7 +127,8 @@ try {
                     }
                 }
         }
-    } | Sort-Object Path -Unique)
+    })
+    $FoundationArtifacts = @($FoundationArtifacts | Sort-Object Path -Unique)
 
     if (-not $FoundationArtifacts) {
         throw "No Foundation runtime or module artifacts were found in the pinned toolchain."
