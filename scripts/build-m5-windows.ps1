@@ -34,6 +34,7 @@ if (Test-Path $OutputDirectory) {
     }
 }
 $StagingDirectory = Join-Path $OutputDirectory "staging"
+$SwiftScratchDirectory = Join-Path $OutputDirectory "swift-build"
 $BridgeOutput = Join-Path $OutputDirectory "bridge"
 $BridgeIntermediate = Join-Path $OutputDirectory "bridge-obj"
 $WixToolDirectory = Join-Path $OutputDirectory "wixtoolset"
@@ -401,20 +402,18 @@ try {
     Copy-Item -Path $StagedConfiguration -Destination $PublicDirectory
 
     Invoke-Checked swift @(
-        "build", "-c", "release", "--triple", $SwiftTriple,
+        "build", "--scratch-path", $SwiftScratchDirectory,
+        "-c", "release", "--triple", $SwiftTriple,
         "--product", "OpenWidgetWindowsProviderFixture"
     )
-    $SwiftBinPath = (& swift build -c release --triple $SwiftTriple `
-        --show-bin-path | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $SwiftBinPath) {
-        throw "SwiftPM did not report the $SwiftTriple release product directory."
+    $SwiftExecutables = @(
+        Get-ChildItem -Path $SwiftScratchDirectory `
+            -Filter "OpenWidgetWindowsProviderFixture.exe" -File -Recurse
+    )
+    if ($SwiftExecutables.Count -ne 1) {
+        throw "Expected one $SwiftTriple provider executable in its isolated SwiftPM build root; found $($SwiftExecutables.Count)."
     }
-    $SwiftExecutable = Join-Path `
-        $SwiftBinPath `
-        "OpenWidgetWindowsProviderFixture.exe"
-    if (-not (Test-Path $SwiftExecutable -PathType Leaf)) {
-        throw "The Swift provider executable was not produced at '$SwiftExecutable'."
-    }
+    $SwiftExecutable = $SwiftExecutables[0].FullName
     Copy-Item $SwiftExecutable $StagingDirectory
 
     Invoke-Checked msbuild @(
