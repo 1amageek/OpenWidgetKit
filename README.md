@@ -235,10 +235,11 @@ and the currently verified Windows Swift 6.4 development snapshot from
 2026-08-14. The packaging gate verifies exact NuGet hashes and obtains each
 target architecture's Swift/Foundation payload from the pinned toolchain's
 official `rtl.shared.<architecture>.msm` redistributable merge module. In this
-name, `shared` describes dynamic Swift linkage; merging the module into the
-helper MSI still materializes an application-private runtime. The gate preserves
-that layout, checks every PE machine, and proves the Swift runtime
-dependency closure instead of searching across host and cross-target SDK trees.
+name, `shared` describes dynamic Swift linkage. The gate uses the same WiX 4.0.5
+toolchain as the Swift installer to export the merge module's embedded cabinet
+directly into an application-private runtime. It checks every PE machine and
+proves the Swift runtime dependency closure instead of searching across host
+and cross-target SDK trees.
 WiX 4.0.5 matches the SDK used to produce Swift 6.4's merge modules and avoids
 making the build implicitly accept the maintenance-fee EULA introduced in later
 WiX releases.

@@ -10,7 +10,6 @@ Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $ConfigurationTemplate = Join-Path $RepositoryRoot "Windows\Packaging\OpenWidgetProvider.json"
 $BridgeProject = Join-Path $RepositoryRoot "Windows\Bridge\OpenWidgetWindowsBridge.vcxproj"
-$SwiftRuntimeProject = Join-Path $RepositoryRoot "Windows\Packaging\SwiftRuntime\OpenWidgetSwiftRuntime.wixproj"
 $SwiftTriple = if ($Architecture -eq "x64") {
     "x86_64-unknown-windows-msvc"
 } else {
@@ -37,9 +36,10 @@ if (Test-Path $OutputDirectory) {
 $StagingDirectory = Join-Path $OutputDirectory "staging"
 $BridgeOutput = Join-Path $OutputDirectory "bridge"
 $BridgeIntermediate = Join-Path $OutputDirectory "bridge-obj"
-$SwiftRuntimeOutput = Join-Path $OutputDirectory "swift-runtime-msi"
-$SwiftRuntimeIntermediate = Join-Path $OutputDirectory "swift-runtime-obj"
+$WixToolDirectory = Join-Path $OutputDirectory "wixtoolset"
+$WixPackageContent = Join-Path $WixToolDirectory "package"
 $SwiftRuntimeImage = Join-Path $OutputDirectory "swift-runtime-image"
+$SwiftRuntimeIntermediate = Join-Path $OutputDirectory "swift-runtime-obj"
 $InspectionDirectory = Join-Path $OutputDirectory "inspection"
 $EvidencePath = Join-Path $OutputDirectory "m5-build-evidence.json"
 $MSIXPath = Join-Path $OutputDirectory "OpenWidgetKit-$Architecture.msix"
@@ -196,7 +196,7 @@ function Assert-RuntimeDependencyClosure {
     foreach ($RuntimeFile in $RuntimeFiles) {
         $Key = $RuntimeFile.Name.ToLowerInvariant()
         if ($RuntimeByName.ContainsKey($Key)) {
-            throw "The Swift runtime administrative image contains duplicate '$($RuntimeFile.Name)' files."
+            throw "The Swift runtime merge module contains duplicate '$($RuntimeFile.Name)' files."
         }
         $RuntimeByName[$Key] = $RuntimeFile.Source
     }
@@ -267,79 +267,76 @@ function Expand-SwiftRuntimeRedistributable {
     }
     $MergeModule = $MergeModules[0]
 
-    [xml]$RuntimeProjectDocument = Get-Content -Raw $SwiftRuntimeProject
-    $ExpectedWixSDK = "WixToolset.Sdk/$($BuildConfiguration.wixToolsetSDKVersion)"
-    if ($RuntimeProjectDocument.Project.Sdk -ne $ExpectedWixSDK) {
-        throw "The Swift runtime WiX project does not match the configured SDK pin."
-    }
-
-    Invoke-Checked msbuild @(
-        $SwiftRuntimeProject,
-        "/restore",
-        "/p:Configuration=Release",
-        "/p:Platform=$MSBuildPlatform",
-        "/p:SwiftRuntimeMergeModule=$($MergeModule.FullName)",
-        "/p:OutputPath=$SwiftRuntimeOutput\",
-        "/p:BaseIntermediateOutputPath=$SwiftRuntimeIntermediate\",
-        "/p:RestoreForceEvaluate=true"
-    )
-    $NuGetRoot = if ($env:NUGET_PACKAGES) {
-        $env:NUGET_PACKAGES
-    } else {
-        Join-Path $env:USERPROFILE ".nuget\packages"
-    }
-    $WixPackagePath = Join-Path $NuGetRoot `
-        "wixtoolset.sdk\$($BuildConfiguration.wixToolsetSDKVersion)\wixtoolset.sdk.$($BuildConfiguration.wixToolsetSDKVersion).nupkg"
-    if (-not (Test-Path $WixPackagePath)) {
-        throw "The pinned WiX Toolset SDK package was not restored."
-    }
+    New-Item -ItemType Directory -Path $WixToolDirectory -Force | Out-Null
+    $WixPackagePath = Join-Path $WixToolDirectory "wixtoolset.sdk.zip"
+    $WixPackageURI = "https://api.nuget.org/v3-flatcontainer/wixtoolset.sdk/$($BuildConfiguration.wixToolsetSDKVersion)/wixtoolset.sdk.$($BuildConfiguration.wixToolsetSDKVersion).nupkg"
+    Invoke-WebRequest -Uri $WixPackageURI -OutFile $WixPackagePath
     $WixPackageHash = (Get-FileHash -Algorithm SHA256 -Path $WixPackagePath).Hash
     if ($WixPackageHash -ne "917009BEF10F430EE72C4401F70FFCB36562A53F41EA027B8DCACBA5E9886A6F") {
         throw "WiX Toolset SDK package hash mismatch: $WixPackageHash"
     }
-    $RuntimeMSIs = @(
-        Get-ChildItem -Path $SwiftRuntimeOutput -Filter "*.msi" -File -Recurse
+    Expand-Archive -Path $WixPackagePath -DestinationPath $WixPackageContent
+    $WixExecutable = Join-Path $WixPackageContent "tools\net472\x64\wix.exe"
+    if (-not (Test-Path $WixExecutable -PathType Leaf)) {
+        throw "The pinned WiX Toolset SDK does not contain its x64 command-line tool."
+    }
+    New-Item -ItemType Directory -Path $SwiftRuntimeIntermediate -Force | Out-Null
+    $DecompiledModule = Join-Path $SwiftRuntimeIntermediate "SwiftRuntime.wxs"
+    Invoke-Checked $WixExecutable @(
+        "msi", "decompile", $MergeModule.FullName,
+        "-type", "msm",
+        "-intermediateFolder", $SwiftRuntimeIntermediate,
+        "-o", $DecompiledModule,
+        "-x", $SwiftRuntimeImage
     )
-    if ($RuntimeMSIs.Count -ne 1) {
-        throw "Expected one Swift runtime administrative MSI; found $($RuntimeMSIs.Count)."
-    }
-    New-Item -ItemType Directory -Path $SwiftRuntimeImage -Force | Out-Null
-    & msiexec.exe @(
-        "/a", $RuntimeMSIs[0].FullName, "/qn", "/norestart",
-        "TARGETDIR=$SwiftRuntimeImage"
-    )
-    if ($LASTEXITCODE -notin @(0, 3010)) {
-        throw "Swift runtime administrative extraction failed with exit code $LASTEXITCODE."
-    }
-    $SwiftCoreFiles = @(
-        Get-ChildItem -Path $SwiftRuntimeImage -Filter "swiftCore.dll" -File -Recurse
-    )
-    if ($SwiftCoreFiles.Count -ne 1) {
-        throw "Expected one swiftCore.dll in the Swift runtime administrative image; found $($SwiftCoreFiles.Count)."
-    }
-    $PayloadRoot = $SwiftCoreFiles[0].Directory.Parent.FullName
-    $PayloadItems = @(Get-ChildItem -Path $PayloadRoot -Force)
-    if (-not $PayloadItems) {
-        throw "The Swift runtime administrative image is empty."
-    }
-    $PayloadItems | Copy-Item -Destination $Destination -Recurse
 
+    [xml]$ModuleDocument = Get-Content -Raw $DecompiledModule
+    $ModuleNamespaces = [Xml.XmlNamespaceManager]::new($ModuleDocument.NameTable)
+    $ModuleNamespaces.AddNamespace("wix", "http://wixtoolset.org/schemas/v4/wxs")
     $RuntimeFiles = @(
-        Get-ChildItem -Path $PayloadRoot -Filter "*.dll" -File -Recurse |
+        $ModuleDocument.SelectNodes("//wix:File", $ModuleNamespaces) |
             ForEach-Object {
-                [PSCustomObject]@{
-                    Name = $_.Name
-                    Source = $_.FullName
-                    Path = [IO.Path]::GetRelativePath(
-                        $PayloadRoot,
-                        $_.FullName
-                    ).Replace("\", "/")
-                    SHA256 = (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash
+                $Name = $_.GetAttribute("Name")
+                if ($Name.EndsWith(".dll", [StringComparison]::OrdinalIgnoreCase)) {
+                    if ([String]::IsNullOrWhiteSpace($Name) `
+                        -or [IO.Path]::GetFileName($Name) -ne $Name) {
+                        throw "The Swift runtime merge module has an invalid package file name '$Name'."
+                    }
+                    $Source = $_.GetAttribute("Source")
+                    if ($Source -notmatch '^SourceDir[\\/]') {
+                        throw "The Swift runtime merge module has an unexpected extracted source '$Source'."
+                    }
+                    $RuntimeImageRoot = [IO.Path]::GetFullPath($SwiftRuntimeImage) + `
+                        [IO.Path]::DirectorySeparatorChar
+                    $ExtractedPath = [IO.Path]::GetFullPath((Join-Path `
+                        $SwiftRuntimeImage `
+                        ($Source -replace '^SourceDir[\\/]', '')
+                    ))
+                    if (-not $ExtractedPath.StartsWith(
+                        $RuntimeImageRoot,
+                        [StringComparison]::OrdinalIgnoreCase
+                    )) {
+                        throw "The Swift runtime merge module source escapes its extraction root: '$Source'."
+                    }
+                    if (-not (Test-Path $ExtractedPath -PathType Leaf)) {
+                        throw "The Swift runtime merge module did not extract '$Name'."
+                    }
+                    $DestinationPath = Join-Path $Destination $Name
+                    if (Test-Path $DestinationPath) {
+                        throw "The Swift runtime merge module contains duplicate package file '$Name'."
+                    }
+                    Copy-Item -Path $ExtractedPath -Destination $DestinationPath
+                    [PSCustomObject]@{
+                        Name = $Name
+                        Source = $DestinationPath
+                        Path = $Name
+                        SHA256 = (Get-FileHash -Algorithm SHA256 -Path $DestinationPath).Hash
+                    }
                 }
             } | Sort-Object Path
     )
     if (-not $RuntimeFiles) {
-        throw "The Swift runtime administrative image contains no DLLs."
+        throw "The Swift runtime merge module contains no DLLs."
     }
     Assert-PEMachine `
         -Files @($RuntimeFiles | ForEach-Object { $_.Source }) `
