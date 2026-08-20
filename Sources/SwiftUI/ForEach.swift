@@ -49,7 +49,7 @@ extension ForEach: WidgetNodeConvertible where Content: View {
                     typeName: String(reflecting: ID.self)
                 )
             }
-            let identifier = context.identityStore.identifier(
+            let identifier = try context.identityStore.identifier(
                 for: value,
                 namespace: context.path
             )

@@ -2,11 +2,32 @@ import OpenFoundation
 import OpenWidgetRuntime
 
 package actor WindowsWidgetProviderController {
+    private enum ShutdownState {
+        case running
+        case draining
+        case completed
+    }
+
+    private final class ShutdownOperation: Sendable {
+        let task: Task<Void, Error>
+
+        init(
+            service: WidgetRuntimeService,
+            bridge: any WindowsWidgetBridge
+        ) {
+            task = Task {
+                await service.shutdown()
+                try bridge.completeShutdown()
+            }
+        }
+    }
+
     private let configuration: OpenWidgetProviderConfiguration
     private let service: WidgetRuntimeService
     private let bridge: any WindowsWidgetBridge
     private let diagnostics: @Sendable (WindowsWidgetBridgeDiagnostic) -> Void
-    private var shutdownCompleted = false
+    private var shutdownState = ShutdownState.running
+    private var shutdownOperation: ShutdownOperation?
 
     package init(
         configuration: OpenWidgetProviderConfiguration,
@@ -22,47 +43,42 @@ package actor WindowsWidgetProviderController {
 
     package func handle(_ event: WindowsWidgetProviderEvent) async {
         do {
+            if shutdownState != .running, event != .shutdownRequested {
+                throw WindowsWidgetHostError.shuttingDown
+            }
             switch event {
-            case .create(let instanceID, let kind, let family):
+            case .create(let instanceID, let kind, let family, let isActive):
                 try await service.createInstance(
                     id: instanceID,
                     kind: kind,
                     configuration: try instanceConfiguration(
                         kind: kind,
                         family: family
-                    )
+                    ),
+                    isActive: isActive
                 )
-            case .recover(let instanceID, let kind, let family, _):
-                let existing = await service.currentConfigurations()
-                    .contains { $0.instanceID == instanceID }
-                if existing {
-                    try await service.updateContext(
-                        for: instanceID,
-                        configuration: try instanceConfiguration(
-                            kind: kind,
-                            family: family
-                        )
-                    )
-                } else {
-                    try await service.createInstance(
-                        id: instanceID,
+            case .recover(
+                let instanceID,
+                let kind,
+                let family,
+                let isActive,
+                let hasRetainedHostContent
+            ):
+                try await service.createInstance(
+                    id: instanceID,
+                    kind: kind,
+                    configuration: try instanceConfiguration(
                         kind: kind,
-                        configuration: try instanceConfiguration(
-                            kind: kind,
-                            family: family
-                        )
-                    )
-                }
+                        family: family
+                    ),
+                    isActive: isActive,
+                    hasRetainedHostContent: hasRetainedHostContent
+                )
             case .activate(let instanceID):
-                guard await service.currentConfigurations().contains(where: {
-                    $0.instanceID == instanceID
-                }) else {
-                    throw WindowsWidgetHostError.unknownInstance(instanceID)
-                }
-                await service.reload(instanceID: instanceID)
-            case .deactivate:
-                break
-            case .contextChanged(let instanceID, let family):
+                try await service.activateInstance(id: instanceID)
+            case .deactivate(let instanceID):
+                try await service.deactivateInstance(id: instanceID)
+            case .contextChanged(let instanceID, let family, let isActive):
                 guard let current = await service.currentConfigurations()
                     .first(where: { $0.instanceID == instanceID }) else {
                     throw WindowsWidgetHostError.unknownInstance(instanceID)
@@ -72,7 +88,8 @@ package actor WindowsWidgetProviderController {
                     configuration: try instanceConfiguration(
                         kind: current.kind,
                         family: family
-                    )
+                    ),
+                    isActive: isActive
                 )
             case .delete(let instanceID, _):
                 guard await service.currentConfigurations().contains(where: {
@@ -81,26 +98,67 @@ package actor WindowsWidgetProviderController {
                     throw WindowsWidgetHostError.unknownInstance(instanceID)
                 }
                 await service.deleteInstance(id: instanceID)
+            // FIXME(INCOMPLETE_IMPLEMENTATION): The production WinRT
+            // OnActionInvoked path currently terminates with a typed unsupported
+            // failure. M7 is complete only when validated action identities,
+            // payloads, handlers, stale-generation rejection, and reload behavior
+            // are implemented and exercised in the real Widgets Board.
             case .actionInvoked(_, let verb, _, _):
                 throw WindowsWidgetHostError.unsupportedAction(verb)
             case .shutdownRequested:
                 try await completeShutdown()
             }
         } catch {
+            let instanceID = event.instanceID
+            let runtimeInfo: RuntimeWidgetInfo? = if let instanceID {
+                await service.currentConfigurations().first {
+                    $0.instanceID == instanceID
+                }
+            } else {
+                nil
+            }
+            let generation: UInt64? = if let instanceID {
+                await service.currentGeneration(for: instanceID)
+            } else {
+                nil
+            }
             diagnostics(
                 WindowsWidgetBridgeDiagnostic(
                     code: -2,
-                    message: String(describing: error)
+                    message: [
+                        "operation=\(event.operationName)",
+                        "kind=\(event.widgetKind ?? runtimeInfo?.kind ?? "-")",
+                        "instance=\(instanceID ?? "-")",
+                        "generation=\(generation.map { String($0) } ?? "-")",
+                        "cause=\(String(reflecting: type(of: error))): \(error)"
+                    ].joined(separator: " ")
                 )
             )
         }
     }
 
     package func completeShutdown() async throws {
-        guard !shutdownCompleted else { return }
-        shutdownCompleted = true
-        await service.shutdown()
-        try bridge.completeShutdown()
+        guard shutdownState != .completed else { return }
+        let operation: ShutdownOperation
+        if let currentOperation = shutdownOperation {
+            operation = currentOperation
+        } else {
+            shutdownState = .draining
+            operation = ShutdownOperation(service: service, bridge: bridge)
+            shutdownOperation = operation
+        }
+        do {
+            try await operation.task.value
+            if shutdownOperation === operation {
+                shutdownOperation = nil
+                shutdownState = .completed
+            }
+        } catch {
+            if shutdownOperation === operation {
+                shutdownOperation = nil
+            }
+            throw error
+        }
     }
 
     private func instanceConfiguration(

@@ -35,24 +35,26 @@ package func makeWidgetDocument<Content: View>(
     environment: EnvironmentValues = EnvironmentValues(),
     identityStore: WidgetIdentityStore = WidgetIdentityStore()
 ) throws -> WidgetDocument {
-    guard environment.displayScale.isFinite, environment.displayScale > 0 else {
-        throw WidgetSemanticError.invalidDisplayScale
+    try identityStore.withEvaluation {
+        guard environment.displayScale.isFinite, environment.displayScale > 0 else {
+            throw WidgetSemanticError.invalidDisplayScale
+        }
+        var context = WidgetViewGraphContext(
+            environment: environment.widgetSnapshot,
+            identityStore: identityStore
+        )
+        let children = try context.withPath(.role("content")) {
+            try lowerWidgetView(content, in: &$0)
+        }
+        let root = WidgetNode(
+            id: WidgetNodeID().appending(.role("root")),
+            kind: .group,
+            children: children
+        )
+        return WidgetDocument(
+            root: root,
+            environment: context.environment,
+            resources: context.resources
+        )
     }
-    var context = WidgetViewGraphContext(
-        environment: environment.widgetSnapshot,
-        identityStore: identityStore
-    )
-    let children = try context.withPath(.role("content")) {
-        try lowerWidgetView(content, in: &$0)
-    }
-    let root = WidgetNode(
-        id: WidgetNodeID().appending(.role("root")),
-        kind: .group,
-        children: children
-    )
-    return WidgetDocument(
-        root: root,
-        environment: context.environment,
-        resources: context.resources
-    )
 }

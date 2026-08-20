@@ -220,13 +220,13 @@ fixture.
 
 | Component | Pinned identity |
 |---|---|
-| Swift installer | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a-windows10.exe` |
-| Official artifact URL | `https://download.swift.org/swift-6.4.x-branch/windows10/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a-windows10.exe` |
-| Artifact size | 2,100,187,856 bytes |
-| Artifact SHA-256 | `C287DD533A65A73D657B1B9F2305BE50552F89B46199A0F6162A287DEE547149` |
-| Artifact ETag | `6C286D90F53F9C163D2903A8A6583474` |
-| Swift source tag | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a` |
-| Peeled source commit | `db4e13695491982c8de74c36c5efb75bbc715987` |
+| Swift installer | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a-windows10.exe` |
+| Official artifact URL | `https://download.swift.org/swift-6.4.x-branch/windows10/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a-windows10.exe` |
+| Artifact size | 2,100,445,560 bytes |
+| Artifact SHA-256 | `17D5EBA8DFDC9E99BF13C0F26169022BE2F816B19E66D883A596D3512CFB0A04` |
+| Artifact ETag | `000596E80AF6A46E3F79C3C61829E94B` |
+| Swift source tag | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a` |
+| Peeled source commit | `424cae54c1a10da79456ce66f330e6639439368f` |
 | Initial target | `x86_64-unknown-windows-msvc` |
 
 Foundation, FoundationEssentials, FoundationInternationalization, the standard

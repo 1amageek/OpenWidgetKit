@@ -6,7 +6,7 @@ package actor WidgetRuntimeService {
         let definition: RuntimeWidgetDefinition
         let identityStore: WidgetIdentityStore
         var configuration: RuntimeWidgetInstanceConfiguration
-        var generation: UInt64
+        var isActive: Bool
         var task: Task<Void, Never>?
     }
 
@@ -42,6 +42,9 @@ package actor WidgetRuntimeService {
     private let providerTimeout: Duration
     private let diagnostics: WidgetRuntimeDiagnosticSink
     private var instances: [String: Instance] = [:]
+    // Generation tombstones outlive an instance so a reused host identifier
+    // cannot make an update from an earlier lifetime current again.
+    private var generations: [String: UInt64] = [:]
     private var isShutdown = false
 
     package init(
@@ -61,7 +64,9 @@ package actor WidgetRuntimeService {
     package func createInstance(
         id: String,
         kind: String,
-        configuration: RuntimeWidgetInstanceConfiguration
+        configuration: RuntimeWidgetInstanceConfiguration,
+        isActive: Bool = true,
+        hasRetainedHostContent: Bool = false
     ) async throws {
         guard !isShutdown else {
             throw WidgetRuntimeError.hostUnavailable
@@ -81,18 +86,20 @@ package actor WidgetRuntimeService {
             definition: definition,
             identityStore: identityStore,
             configuration: configuration,
-            generation: 0,
+            isActive: isActive,
             task: nil
         )
+        guard isActive || !hasRetainedHostContent else { return }
         do {
             try await startRequest(for: id)
         } catch {
-            if var failedInstance = instances.removeValue(forKey: id) {
-                failedInstance.generation &+= 1
+            if let failedInstance = instances.removeValue(forKey: id) {
+                failedInstance.task?.cancel()
                 do {
+                    let generation = try advanceGeneration(for: id)
                     try await host.remove(
                         instanceID: id,
-                        generation: failedInstance.generation
+                        generation: generation
                     )
                 } catch {
                     recordHostFailure(error, instanceID: id)
@@ -104,14 +111,48 @@ package actor WidgetRuntimeService {
 
     package func updateContext(
         for id: String,
-        configuration: RuntimeWidgetInstanceConfiguration
+        configuration: RuntimeWidgetInstanceConfiguration,
+        isActive: Bool? = nil
     ) async throws {
+        guard !isShutdown else {
+            throw WidgetRuntimeError.hostUnavailable
+        }
         guard let instance = instances[id] else {
             throw WidgetRuntimeError.unknownInstance(id)
         }
         try await validate(configuration, for: instance.definition)
         instances[id]?.configuration = configuration
+        if let isActive {
+            instances[id]?.isActive = isActive
+        }
+        if instances[id]?.isActive == true {
+            try await startRequest(for: id)
+        } else {
+            try await invalidateCurrentWork(for: id)
+        }
+    }
+
+    package func activateInstance(id: String) async throws {
+        guard !isShutdown else {
+            throw WidgetRuntimeError.hostUnavailable
+        }
+        guard instances[id] != nil else {
+            throw WidgetRuntimeError.unknownInstance(id)
+        }
+        instances[id]?.isActive = true
         try await startRequest(for: id)
+    }
+
+    package func deactivateInstance(id: String) async throws {
+        guard !isShutdown else {
+            throw WidgetRuntimeError.hostUnavailable
+        }
+        guard let instance = instances[id] else {
+            throw WidgetRuntimeError.unknownInstance(id)
+        }
+        guard instance.isActive else { return }
+        instances[id]?.isActive = false
+        try await invalidateCurrentWork(for: id)
     }
 
     package func reload(instanceID: String) async {
@@ -151,13 +192,13 @@ package actor WidgetRuntimeService {
     }
 
     package func deleteInstance(id: String) async {
-        guard var instance = instances.removeValue(forKey: id) else { return }
-        instance.generation &+= 1
+        guard let instance = instances.removeValue(forKey: id) else { return }
         instance.task?.cancel()
         do {
+            let generation = try advanceGeneration(for: id)
             try await host.remove(
                 instanceID: id,
-                generation: instance.generation
+                generation: generation
             )
         } catch {
             recordHostFailure(error, instanceID: id)
@@ -175,6 +216,10 @@ package actor WidgetRuntimeService {
         .sorted { lhs, rhs in lhs.instanceID < rhs.instanceID }
     }
 
+    package func currentGeneration(for instanceID: String) -> UInt64? {
+        generations[instanceID]
+    }
+
     package func shutdown() async {
         guard !isShutdown else { return }
         isShutdown = true
@@ -183,12 +228,12 @@ package actor WidgetRuntimeService {
         for instance in removedInstances.values {
             instance.task?.cancel()
         }
-        for (id, var instance) in removedInstances {
-            instance.generation &+= 1
+        for (id, _) in removedInstances {
             do {
+                let generation = try advanceGeneration(for: id)
                 try await host.remove(
                     instanceID: id,
-                    generation: instance.generation
+                    generation: generation
                 )
             } catch {
                 recordHostFailure(error, instanceID: id)
@@ -199,8 +244,7 @@ package actor WidgetRuntimeService {
     private func startRequest(for id: String) async throws {
         guard !isShutdown, var instance = instances[id] else { return }
         instance.task?.cancel()
-        instance.generation &+= 1
-        let generation = instance.generation
+        let generation = try advanceGeneration(for: id)
         let definition = instance.definition
         let configuration = instance.configuration
         let identityStore = instance.identityStore
@@ -261,6 +305,23 @@ package actor WidgetRuntimeService {
             }
         }
         instances[id] = instance
+    }
+
+    private func invalidateCurrentWork(for id: String) async throws {
+        guard !isShutdown, var instance = instances[id] else { return }
+        instance.task?.cancel()
+        instance.task = nil
+        let generation = try advanceGeneration(for: id)
+        instances[id] = instance
+        do {
+            try await host.invalidate(instanceID: id, generation: generation)
+        } catch let error as WidgetRuntimeError {
+            throw error
+        } catch {
+            throw WidgetRuntimeError.hostRejected(
+                message: String(describing: error)
+            )
+        }
     }
 
     private func consume(
@@ -339,6 +400,13 @@ package actor WidgetRuntimeService {
             }
             pendingPastEntry = nil
 
+            // Inactive widgets retain their last accepted content, but do not
+            // keep future timeline sleeps or automatic reload work alive.
+            // An explicit reload can still publish an entry that is already due.
+            guard isActive(instanceID: instanceID, generation: generation) else {
+                return
+            }
+
             do {
                 try await clock.sleep(until: event.date)
                 try Task.checkCancellation()
@@ -376,7 +444,7 @@ package actor WidgetRuntimeService {
         generation: UInt64
     ) async {
         guard let instance = instances[instanceID],
-              instance.generation == generation else { return }
+              generations[instanceID] == generation else { return }
         let update = RuntimeWidgetUpdate(
             instanceID: instanceID,
             kind: instance.kind,
@@ -397,8 +465,25 @@ package actor WidgetRuntimeService {
     }
 
     private func isCurrent(instanceID: String, generation: UInt64) -> Bool {
-        guard !isShutdown, let instance = instances[instanceID] else { return false }
-        return instance.generation == generation
+        guard !isShutdown, instances[instanceID] != nil else { return false }
+        return generations[instanceID] == generation
+    }
+
+    private func isActive(instanceID: String, generation: UInt64) -> Bool {
+        guard isCurrent(instanceID: instanceID, generation: generation) else {
+            return false
+        }
+        return instances[instanceID]?.isActive == true
+    }
+
+    private func advanceGeneration(for instanceID: String) throws -> UInt64 {
+        let current = generations[instanceID] ?? 0
+        guard current < UInt64.max else {
+            throw WidgetRuntimeError.generationExhausted(instanceID: instanceID)
+        }
+        let next = current + 1
+        generations[instanceID] = next
+        return next
     }
 
     private func validate(

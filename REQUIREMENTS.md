@@ -331,9 +331,9 @@ materializeしない設計とします。JSONやUTF変換はhost ABI境界に限
 image/resourceはownerとidentityを保持し、各timeline entryで無条件にbyte arrayへコピー
 してはいけません。Windows hostが要求する最終形式への変換だけを明示的copy boundaryとします。
 
-## Acceptance criteria
+## Static production acceptance criteria
 
-最初のproduction milestoneは次をすべて満たしたときだけ完了です。
+最初のstatic production milestoneは次をすべて満たしたときだけ完了です。
 
 1. 同一fixture sourceがApple system modulesとWindows package modulesでcompile/linkする。
 2. Windows x64とarm64でProvider executableがpackage化される。
@@ -341,10 +341,15 @@ image/resourceはownerとidentityを保持し、各timeline entryで無条件に
 4. `.atEnd`、`.after`、`.never`と明示reloadが実時間で検証される。
 5. 対応Viewのgolden Adaptive Cards payloadと実host表示が検証される。
 6. 未対応View、malformed resource、provider timeout、host rejectionが明示的に失敗する。
-7. callback lifetime、reload/delete競合、shutdown競合、action再入を検証する。
+7. callback lifetime、reload/delete競合、shutdown競合を検証する。
 8. manifest kind/family/CLSIDとruntime registryが一致する。
 9. `FIXME(INCOMPLETE_IMPLEMENTATION)`を削除する宣言には成功・失敗のbehavior testがある。
 10. Foundation geometry型がApple、Windows、OpenCoreGraphics間で同じsource valueとして受け渡せる。
 11. 配布物のFoundation/runtime libraryが固定したcompiler toolchainと一致する。
 
 build成功、import成功、型の存在だけをproduction完了の証拠にしてはいけません。
+
+Interaction production acceptance additionally requires registered
+`Action.Execute` success, unknown/duplicate/stale action failure, action-triggered
+reload, and callback reentrancy verification. These criteria belong to M7 and
+must not be claimed by the static M6 milestone.

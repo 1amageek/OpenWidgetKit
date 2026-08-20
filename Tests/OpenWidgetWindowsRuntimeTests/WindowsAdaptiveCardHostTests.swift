@@ -53,6 +53,55 @@ private final class RecordingWindowsBridge: WindowsWidgetBridge, Sendable {
     }
 }
 
+private final class RejectingTransitionWindowsBridge: WindowsWidgetBridge, Sendable {
+    private struct State: Sendable {
+        var shouldRejectInvalidation = false
+        var shouldRejectRemoval = true
+    }
+
+    private let state = Mutex(State())
+
+    func runBlocking() throws {}
+    func requestShutdown() throws {}
+    func completeShutdown() throws {}
+    func invalidate(instanceID: String, generation: UInt64) throws {
+        let rejects = state.withLock { state in
+            defer { state.shouldRejectInvalidation = false }
+            return state.shouldRejectInvalidation
+        }
+        if rejects {
+            throw WindowsWidgetHostError.hostRejected(
+                code: 5,
+                message: "The invalidation transition was rejected."
+            )
+        }
+    }
+    func update(
+        instanceID: String,
+        generation: UInt64,
+        templateJSON: String?,
+        dataJSON: String,
+        customState: String
+    ) throws {}
+
+    func remove(instanceID: String, generation: UInt64) throws {
+        let rejects = state.withLock { state in
+            defer { state.shouldRejectRemoval = false }
+            return state.shouldRejectRemoval
+        }
+        if rejects {
+            throw WindowsWidgetHostError.hostRejected(
+                code: 5,
+                message: "The removal transition was rejected."
+            )
+        }
+    }
+
+    func rejectNextInvalidation() {
+        state.withLock { $0.shouldRejectInvalidation = true }
+    }
+}
+
 struct WindowsAdaptiveCardHostTests {
     @Test
     func rejectsStaleUpdateBeforeCallingTheBridge() async throws {
@@ -70,19 +119,72 @@ struct WindowsAdaptiveCardHostTests {
     }
 
     @Test
-    func deletionPermanentlyFencesTheInstance() async throws {
+    func deletionFencesOldLifetimeAndRecreationSendsACompleteTemplate() async throws {
         let bridge = RecordingWindowsBridge()
         let host = try makeHost(bridge: bridge)
         try await host.invalidate(instanceID: "instance", generation: 1)
+        try await host.apply(makeUpdate(generation: 1))
         try await host.remove(instanceID: "instance", generation: 2)
+
+        await #expect(throws: WindowsWidgetHostError.self) {
+            try await host.invalidate(instanceID: "instance", generation: 2)
+        }
+        await #expect(throws: WindowsWidgetHostError.self) {
+            try await host.apply(makeUpdate(generation: 1))
+        }
+        try await host.invalidate(instanceID: "instance", generation: 3)
+        try await host.apply(makeUpdate(generation: 3))
+
+        #expect(bridge.recordedUpdates.map(\.generation) == [1, 3])
+        #expect(bridge.recordedUpdates.allSatisfy { $0.templateJSON != nil })
+    }
+
+    @Test
+    func rejectedRemovalKeepsTheSwiftFenceFailClosed() async throws {
+        let bridge = RejectingTransitionWindowsBridge()
+        let host = WindowsAdaptiveCardHost(
+            compiler: try AdaptiveCardCompiler(
+                resourceResolver: EmptyResourceResolver()
+            ),
+            bridge: bridge
+        )
+        try await host.invalidate(instanceID: "instance", generation: 1)
+
+        await #expect(throws: WindowsWidgetHostError.self) {
+            try await host.remove(instanceID: "instance", generation: 2)
+        }
+        await #expect(throws: WindowsWidgetHostError.self) {
+            try await host.apply(makeUpdate(generation: 1))
+        }
+        await #expect(throws: WindowsWidgetHostError.self) {
+            try await host.invalidate(instanceID: "instance", generation: 2)
+        }
+        try await host.remove(instanceID: "instance", generation: 2)
+    }
+
+    @Test
+    func rejectedRecreationInvalidationDoesNotOpenTheSwiftFence() async throws {
+        let bridge = RejectingTransitionWindowsBridge()
+        let host = WindowsAdaptiveCardHost(
+            compiler: try AdaptiveCardCompiler(
+                resourceResolver: EmptyResourceResolver()
+            ),
+            bridge: bridge
+        )
+        try await host.invalidate(instanceID: "instance", generation: 1)
+        await #expect(throws: WindowsWidgetHostError.self) {
+            try await host.remove(instanceID: "instance", generation: 2)
+        }
+        try await host.remove(instanceID: "instance", generation: 2)
+        bridge.rejectNextInvalidation()
 
         await #expect(throws: WindowsWidgetHostError.self) {
             try await host.invalidate(instanceID: "instance", generation: 3)
         }
         await #expect(throws: WindowsWidgetHostError.self) {
-            try await host.apply(makeUpdate(generation: 1))
+            try await host.apply(makeUpdate(generation: 3))
         }
-        #expect(bridge.recordedUpdates.isEmpty)
+        try await host.invalidate(instanceID: "instance", generation: 3)
     }
 
     @Test

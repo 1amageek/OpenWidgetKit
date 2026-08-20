@@ -13,4 +13,6 @@ package enum WidgetRuntimeError: Error, Equatable, Sendable {
     case invalidWidgetKind
     case unsupportedFamily(kind: String, family: RuntimeWidgetFamily)
     case invalidDisplaySize
+    case generationExhausted(instanceID: String)
+    case identitySpaceExhausted
 }

@@ -127,7 +127,10 @@ flowchart LR
     Config --> Manifest["AppxManifest generator"]
 ```
 
-`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
+Schema 2の`OpenWidgetProvider.json`がCLSID、kind、family、asset、toolchain/runtime方針の正本です。
+Bundled resourceはpackage-relative `path`だけを保存し、`ms-appx:///` URIはresolverがそのpathから
+導出します。WindowsがURIをpercent-decodeした後に別のpathへ正規化しないよう、resource pathは
+ASCIIのunreserved文字と`/`だけに制限します。
 Widget bodyをbuild時に実行してmanifest metadataを推測しません。runtime開始時にはlowering済みregistryと
 configurationを集合比較し、driftをtyped failureにします。
 
@@ -252,8 +255,12 @@ M4 sourceで確定したsupport matrixは次です。hostが同じ意味を表�
 
 light/darkは同じentryを二つの`EnvironmentValues`で評価し、それぞれ独立したdata namespaceへ
 compileします。familyとthemeは`$host.widgetSize`/`$host.hostTheme`条件で選択します。template cacheは
-canonical template全体をkeyにし、SHA-256は外部identityとして使います。hash collisionで別templateを
-共有しません。
+host capability、family、theme、値を除いたsemantic structureからexact keyを先に生成します。cache hitは
+text、localized value、image URI、resource ownershipだけを再評価し、template treeとJSONを生成しません。
+entryはcanonical template、そのSHA-256 external identity、template生成時に確定したnode path単位の
+binding planを保持します。data materializationはcache miss/hitの両方でこのplanだけを使うため、templateと
+dataが別々にbinding順序を推測する経路はありません。digestだけをcache keyにしないため、hash collisionで
+別templateを共有しません。
 
 ### Future: rasterized resource
 
@@ -325,13 +332,13 @@ source contractを示しますが、M2/M3のWindows compile/runtime gateは未�
 
 | Logical state | Native storage/isolation | normal WASM | Windows contract | Read/mutation entry | Shutdown/release |
 |---|---|---|---|---|---|
-| runtime instances and generations | `WidgetRuntimeService` actor | same actor | same actor; target verification pending | actor methods only | tasks cancelled, instances removed, host removal fence awaited |
+| runtime instances, activity, and lifetime generations | `WidgetRuntimeService` actor with generation tombstones | same actor | same actor; target verification pending | actor methods only | deactivation cancels scheduled work; deletion retains the last generation; shutdown removes instances |
 | provider request terminal state | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; verification pending | `claimProviderCallback` and exactly-once `complete` | timeout task cancelled and continuation resumed once |
 | provider callback value handoff | `Mutex<Payload>` one-shot owner | same owner | same owner; verification pending | callback installs, MainActor consumes once | payload cleared on take; late/duplicate callback rejected |
 | runtime composition | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; verification pending | install/current/uninstall composition functions | uninstall clears both references |
-| view identity map | `WidgetIdentityStore` on `MainActor` | same isolation | same isolation; verification pending | `identifier(for:namespace:)` | released with widget instance |
+| view identity map | `WidgetIdentityStore` on `MainActor` | same isolation | same isolation; verification pending | one transaction spans every entry and environment variant in a requested timeline | unused identities are pruned only after complete success; any failed nested evaluation rolls back; remaining state is released with the widget instance |
 | semantic document/resources | immutable `Sendable` values | same values | same values; verification pending | constructed on `MainActor`, read by runtime/host | value lifetime; no external handle |
-| host generation fence | test host uses actor state | protocol contract only | `WindowsAdaptiveCardHost` actor plus C++ operation fence; target verification pending | invalidate/apply/remove | removal permanently rejects stale commits |
+| host generation fence | test host uses actor state | protocol contract only | `WindowsAdaptiveCardHost` actor plus C++ operation fence; target verification pending | invalidate/apply/remove | removal rejects updates through its generation; a later lifetime requires a strictly newer generation and a complete template |
 
 M4/M5で追加したstateはWindows adapter graphへ限定されます。Embedded SwiftはOpenWidgetKitの対応targetでは
 なく、Windows stateをraw storageへ置換する条件分岐もありません。
@@ -340,10 +347,10 @@ M4/M5で追加したstateはWindows adapter graphへ限定されます。Embedde
 |---|---|---|---|---|---|
 | template cache | `Mutex<CacheState>` | target not selected | unsupported target | same `Mutex<CacheState>` | compiler methods; bounded eviction; compiler lifetime |
 | callback event queue | `Mutex<State>` in focused tests | target not selected | unsupported target | same `Mutex<State>` | enqueue/drain; external actor callback outside lock |
-| provider controller | actor | target not selected | unsupported target | same actor | ordered lifecycle methods; service shutdown then bridge completion |
+| provider controller | actor | target not selected | unsupported target | same actor | ordered active/inactive lifecycle; retryable service shutdown then exactly-once accepted bridge completion |
 | Swift host fence | actor dictionary | target not selected | unsupported target | same actor dictionary | invalidate/apply/remove; bridge I/O actor-ordered |
 | C ABI handle | immutable opaque owner with documented unchecked boundary | target stub rejects use | unsupported target | same owner over C++ state | exactly-once `owk_bridge_close` in deinit |
-| C++ generations/operations | not linked | not linked | not linked | mutex-protected fence plus one operation thread | validation before queue and before `UpdateWidget`; delete barrier; destructor joins |
+| C++ generations/operations | not linked | not linked | not linked | mutex-protected fence plus one operation thread | the class factory follows the Widget Provider `no_module_lock` contract while created provider objects use the custom process lock; recovery is queued before the COM class object is resumed; validation runs before queue and before/after `UpdateWidget`; deletion never blocks a reentrant callback; the payload-free shutdown callback allocates no owner; destructor joins |
 
 M5 preserves two commit/lifetime invariants. The Swift callback owner remains
 retained until the dynamically loaded provider is destroyed; shutdown completion
@@ -353,6 +360,33 @@ records a structure identity only after `UpdateWidget` succeeds. A later update
 may omit `WidgetUpdateRequestOptions.Template` only when that same instance has
 already accepted the same structure; recovery and structural changes always send
 the full template.
+
+Instance generations are monotonic across delete/recreate cycles within the
+process. A removal is a tombstone through its generation, not a permanent ban on
+the host identifier. Recreating an identifier requires a strictly newer
+generation and clears the previously accepted template identity because the new
+Widgets Board instance does not inherit the old instance's template state.
+Swift invalidation fences commit only after the C bridge accepts the same
+transition. Removal is intentionally fail-closed: once the host reports deletion,
+a later bridge cleanup failure cannot reopen that lifetime. Existing widgets are
+recovered and queued before `CoResumeClassObjects` makes the provider callable,
+preventing activation/context callbacks from overtaking startup recovery.
+The dynamic-loader boundary maps ABI status codes back to typed Swift errors;
+stale-generation errors retain their instance ID and generation instead of being
+collapsed into a generic host rejection.
+
+Activity and initial-content ownership are separate contracts. `CreateWidget`
+requests one initial timeline even when its context is inactive, then suppresses
+future scheduled work. An inactive startup recovery keeps the template/data
+already owned by the Widgets Board and defers provider work until activation or
+an explicit reload only when nonempty host `CustomState` proves that a prior
+update was accepted. Recovery with empty state follows the initial-content path.
+
+Stable `ForEach` identities are retained only for the complete timeline currently
+owned by an instance. The identity transaction spans every timeline entry and
+environment variant so light/dark variants cannot prune one another. A failed
+lowering restores the prior map and the next identifier; only a fully successful
+evaluation prunes unused values.
 
 `TimelineProvider.Entry`はApple API上`Sendable`を要求しませんが、completionは`@Sendable`です。この互換境界だけは
 callbackが引き渡した`Timeline<Entry>`を`Any` payloadとしてMutex ownerへ移し、MainActorで一度だけ取り出します。

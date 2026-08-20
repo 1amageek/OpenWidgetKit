@@ -131,31 +131,33 @@ where Provider: TimelineProvider, Content: View {
         context: RuntimeProviderContext
     ) throws -> RuntimeTimeline {
         _ = try timeline.validatedRuntimeValue()
-        let entries = try timeline.entries.map { entry in
-            let documents = try context.environmentVariants.map { snapshot in
-                var environment = EnvironmentValues(snapshot: snapshot)
-                environment.widgetFamily = context.family
-                return try makeWidgetDocument(
-                    content(entry),
-                    environment: environment,
-                    identityStore: context.identityStore
+        return try context.identityStore.withEvaluation {
+            let entries = try timeline.entries.map { entry in
+                let documents = try context.environmentVariants.map { snapshot in
+                    var environment = EnvironmentValues(snapshot: snapshot)
+                    environment.widgetFamily = context.family
+                    return try makeWidgetDocument(
+                        content(entry),
+                        environment: environment,
+                        identityStore: context.identityStore
+                    )
+                }
+                guard let document = documents.first else {
+                    throw WidgetRuntimeError.hostRejected(
+                        message: "A provider context must contain at least one environment variant."
+                    )
+                }
+                return RuntimeTimelineEntry(
+                    date: entry.date,
+                    document: document,
+                    additionalDocuments: Array(documents.dropFirst())
                 )
             }
-            guard let document = documents.first else {
-                throw WidgetRuntimeError.hostRejected(
-                    message: "A provider context must contain at least one environment variant."
-                )
-            }
-            return RuntimeTimelineEntry(
-                date: entry.date,
-                document: document,
-                additionalDocuments: Array(documents.dropFirst())
+            return try RuntimeTimeline(
+                entries: entries,
+                reloadPolicy: timeline.policy.runtimeValue
             )
         }
-        return try RuntimeTimeline(
-            entries: entries,
-            reloadPolicy: timeline.policy.runtimeValue
-        )
     }
 }
 

@@ -42,6 +42,8 @@ struct WindowsPackageManifestTests {
             manifest.components(separatedBy: "<Capability>").count - 1 == 2
         )
         #expect(manifest.contains(#"ProcessorArchitecture="x64""#))
+        #expect(manifest.contains(#"IgnorableNamespaces="uap uap3 com rescap""#))
+        #expect(configuration.resources.first?.uri == "ms-appx:///Assets/icon.png")
     }
 
     @Test
@@ -61,7 +63,12 @@ struct WindowsPackageManifestTests {
                     families: configuration.definitions[0].families
                 )
             ],
-            resources: []
+            resources: [
+                WindowsWidgetResourceConfiguration(
+                    name: "fixture-icon",
+                    path: "Assets/icon.png"
+                )
+            ]
         )
 
         let manifest = WindowsPackageManifestGenerator().generate(
@@ -73,9 +80,21 @@ struct WindowsPackageManifestTests {
         #expect(!manifest.contains("<unsafe>"))
     }
 
+    @Test
+    func rejectsResourcePathsWhoseIdentityChangesDuringURINormalization() {
+        let resource = WindowsWidgetResourceConfiguration(
+            name: "unsafe",
+            path: "Assets/%2e%2e/secret.png"
+        )
+
+        #expect(throws: WindowsWidgetHostError.self) {
+            try resource.validate()
+        }
+    }
+
     private func fixtureConfiguration() -> OpenWidgetProviderConfiguration {
         OpenWidgetProviderConfiguration(
-            schemaVersion: 1,
+            schemaVersion: 2,
             build: WindowsWidgetBuildConfiguration(
                 swiftSnapshot: "snapshot",
                 swiftToolchainIdentifier: "toolchain",
@@ -123,7 +142,12 @@ struct WindowsPackageManifestTests {
                     ]
                 )
             ],
-            resources: []
+            resources: [
+                WindowsWidgetResourceConfiguration(
+                    name: "fixture-icon",
+                    path: "Assets/icon.png"
+                )
+            ]
         )
     }
 

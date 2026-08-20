@@ -10,13 +10,28 @@
 | architecture decisions | Documented | `DESIGN.md` |
 | M1 API baseline | Complete and verified | `API_COMPATIBILITY.md`, both M1 verification scripts, and `Verification/M1_WINDOWS_EVIDENCE.json` |
 | Windows constraints | Documented | `WINDOWS_NOTES.md` |
-| Foundation/geometry ownership | Implemented and verified on Native, normal WASM, and Windows | OpenFoundation owns the canonical CFCG boundary and re-exports toolchain Foundation on full Swift |
+| Foundation/geometry ownership | Implemented; Native and normal WASM verified, Windows pending | OpenFoundation owns the canonical CFCG boundary and re-exports toolchain Foundation on full Swift; the current OpenWidgetKit Windows graph has not been rebuilt |
 | public SwiftUI API | M2 implemented in source | widget-scoped View DSL, builders, Widget protocols, environment, and semantic lowering |
 | public WidgetKit API | host-neutral M3 implemented in source | static configuration, provider bridge, registry bootstrap, and WidgetCenter routing |
 | runtime behavior | host-neutral M3 implemented | provider ownership, validation, three reload policies, generation fences, cancellation, and shutdown |
-| Adaptive Cards compiler | M4 host-neutral implementation verified on Native and normal WASM | canonical encoder, structural identity/cache, theme/family templates, resources, mappings, typed failures, 10 Native tests, and the normal WASM target build |
-| Windows provider | M5 host-neutral Swift surface verified on Native; Windows target verification pending | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, packaging workflow, and 5 Native host/manifest tests |
-| build/test/runtime verification | M2/M3 Native and normal WASM pass; M4 Native/WASM pass; M5 Native tests pass | 59 focused Native test declarations pass; M4 and shared M2/M3 targets build for normal WASM; the x64/ARM64 workflow and real Windows runtime remain unexecuted |
+| Adaptive Cards compiler | M4 host-neutral implementation verified on Native and normal WASM | canonical encoder, structural identity/cache, theme/family templates, resources, mappings, typed failures, 12 Native tests, and the normal WASM target build |
+| Windows provider | M5 host-neutral Swift surface verified on Native; Windows target verification pending | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, packaging workflow, and 12 Native host/manifest/controller tests |
+| build/test/runtime verification | Review changes verified on Native and normal WASM; Windows workflow pending | all 74 focused Native tests pass, the Windows runtime target passes three consecutive warm runs, and the pinned 2026-08-14 normal WASM targets build; x64/ARM64 and real Windows runtime remain unexecuted |
+
+The 2026-08-20 architectural review corrected inactive lifecycle handling,
+delete/recreate generation continuity, template reset across instance lifetimes,
+retained-content-aware inactive recovery,
+shutdown completion retry state, accepted-invalidation/fail-closed-removal host
+fences, startup recovery ordering, the documented Widget Provider
+`no_module_lock` class-factory boundary, a zero-allocation shutdown callback,
+the C++ delete/update reentrancy boundary,
+typed C ABI status preservation, bounded transactional view identity retention,
+binding-plan-driven data-only template-cache hits with overflow-free bounded LRU ordering,
+single-source resource URI derivation, and
+the packaged-COM namespace declaration. Fifteen focused regression test
+declarations were added, and the host-fence and manifest tests were
+strengthened. All 74 Native tests and the affected normal WASM targets pass;
+Windows x64/ARM64 build/link evidence remains pending.
 
 Import-only success, declaration presence, or Package.swift resolution is not implementation evidence.
 
@@ -35,7 +50,7 @@ Widget / WidgetBundle
                                     -> WidgetManager.UpdateWidget
 ```
 
-The 59 focused Native test declarations cover the initial timeline values plus semantic
+The current 74 focused Native test declarations cover the initial timeline values plus semantic
 lowering, stable identities, resource ownership, invalid values, provider
 completion ownership, timeout/duplicate/late completion, all three scheduler
 policies, non-advancing reload rejection, registry failures, bootstrap routing,
@@ -175,6 +190,8 @@ unadvertised until a later milestone defines their semantics.
 - [x] Host `WidgetFamily` context mapping
 - [x] `WidgetCenter` query and reload routing
 - [x] instance generation and stale result rejection at provider and host commit boundaries
+- [x] active/inactive state with initial inactive creation content, inactive recovery deferral, deactivation cancellation, and explicit inactive reload support
+- [x] monotonic generation tombstones across delete/recreate lifetimes
 - [x] shutdown/cancellation behavior
 - [x] reload/delete race and suspended-host-apply tests
 - [ ] Re-run the M3 compile and behavior gates on the pinned Windows toolchain
@@ -200,7 +217,7 @@ as a typed unsupported action rather than ignored.
 - [x] bounded `Mutex`-owned template cache and LRU eviction implemented
 - [x] golden success fixtures added
 - [x] malformed/unsupported failure fixtures added
-- [x] Execute 10 M4 Native tests and record canonical payload evidence in the golden fixtures
+- [x] Execute 12 M4 Native tests and record canonical payload evidence in the golden fixtures
 - [x] Build the M4 target for normal WASM with the pinned Swift 6.4 snapshot and matching SDK
 - [ ] validate visual mapping in the real Widgets Board (M6)
 
@@ -219,9 +236,10 @@ as a typed unsupported action rather than ignored.
 - [x] Define event/result owners and exactly-once release callbacks
 - [x] Create deterministic MSIX manifest and packaging tooling
 - [x] Register COM server and Widget Provider extension from one configuration
-- [x] Validate CLSID/kind/family/resource metadata
+- [x] Validate CLSID/kind/family/resource metadata and derive resource URIs from canonical paths
 - [x] Add a `windows-2025` x64/ARM64 build workflow
-- [x] Execute 5 Native tests for host generation fences and deterministic manifest generation
+- [x] Execute 12 Native tests for host generation fences, controller lifecycle, typed bridge status, and deterministic manifest generation
+- [x] Execute the new inactive lifecycle, recreation, shutdown-retry, transactional-fence, identity-retention, LRU, and complete-template regression tests
 - [ ] Build/link x64
 - [ ] Build/link arm64
 - [ ] inspect expanded MSIX contents and record M5 evidence

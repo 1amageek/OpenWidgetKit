@@ -39,7 +39,7 @@ package struct WindowsPackageManifestGenerator: Sendable {
           xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
           xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
           xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-          IgnorableNamespaces="uap uap3 rescap">
+          IgnorableNamespaces="uap uap3 com rescap">
           <Identity Name="\(xml(provider.packageName))" Publisher="\(xml(provider.publisher))" Version="\(xml(provider.version))" ProcessorArchitecture="\(xml(provider.architecture))" />
           <Properties>
             <DisplayName>\(xml(provider.displayName))</DisplayName>

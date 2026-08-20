@@ -38,7 +38,7 @@ struct AdaptiveCardCompilerTests {
         )
         #expect(payload.dataJSON == #"{"dark":{"v0":"Dark"},"light":{"v0":"Light"}}"#)
         #expect(payload.structureIdentity.count == 64)
-        #expect(!payload.templateWasReused)
+        #expect(!payload.templateCompilationWasSkipped)
     }
 
     @Test
@@ -56,7 +56,7 @@ struct AdaptiveCardCompilerTests {
         #expect(first.templateJSON == second.templateJSON)
         #expect(first.structureIdentity == second.structureIdentity)
         #expect(first.dataJSON != second.dataJSON)
-        #expect(second.templateWasReused)
+        #expect(second.templateCompilationWasSkipped)
     }
 
     @Test
@@ -104,9 +104,38 @@ struct AdaptiveCardCompilerTests {
         let firstStyled = try compiler.compile(styled)
         let secondPlain = try compiler.compile(plain)
 
-        #expect(!firstPlain.templateWasReused)
-        #expect(!firstStyled.templateWasReused)
-        #expect(!secondPlain.templateWasReused)
+        #expect(!firstPlain.templateCompilationWasSkipped)
+        #expect(!firstStyled.templateCompilationWasSkipped)
+        #expect(!secondPlain.templateCompilationWasSkipped)
+    }
+
+    @Test
+    func cacheHitsRefreshLeastRecentlyUsedOrder() throws {
+        let compiler = try AdaptiveCardCompiler(
+            cacheCapacity: 2,
+            resourceResolver: FixtureResourceResolver()
+        )
+        let plain = try makeUpdate(
+            light: Text(verbatim: "Light"),
+            dark: Text(verbatim: "Dark")
+        )
+        let headline = try makeUpdate(
+            light: Text(verbatim: "Light").font(.headline),
+            dark: Text(verbatim: "Dark").font(.headline)
+        )
+        let limited = try makeUpdate(
+            light: Text(verbatim: "Light").lineLimit(1),
+            dark: Text(verbatim: "Dark").lineLimit(1)
+        )
+
+        _ = try compiler.compile(plain)
+        _ = try compiler.compile(headline)
+        let refreshedPlain = try compiler.compile(plain)
+        #expect(refreshedPlain.templateCompilationWasSkipped)
+        _ = try compiler.compile(limited)
+
+        let evictedHeadline = try compiler.compile(headline)
+        #expect(!evictedHeadline.templateCompilationWasSkipped)
     }
 
     @Test
@@ -177,13 +206,52 @@ struct AdaptiveCardCompilerTests {
     }
 
     @Test
+    func cachedTemplateStillReevaluatesImageDataAndOwnership() throws {
+        let compiler = try AdaptiveCardCompiler(
+            resourceResolver: FixtureResourceResolver()
+        )
+        let first = try compiler.compile(
+            makeUpdate(
+                light: VStack {
+                    Text(verbatim: "First heading")
+                    Image("logo", label: Text(verbatim: "First image"))
+                },
+                dark: VStack {
+                    Text(verbatim: "First dark heading")
+                    Image("logo", label: Text(verbatim: "First dark image"))
+                }
+            )
+        )
+        let second = try compiler.compile(
+            makeUpdate(
+                light: VStack {
+                    Text(verbatim: "Second heading")
+                    Image("badge", label: Text(verbatim: "Second image"))
+                },
+                dark: VStack {
+                    Text(verbatim: "Second dark heading")
+                    Image("badge", label: Text(verbatim: "Second dark image"))
+                }
+            )
+        )
+
+        #expect(second.templateCompilationWasSkipped)
+        #expect(first.templateJSON == second.templateJSON)
+        #expect(second.dataJSON.contains("Second heading"))
+        #expect(second.dataJSON.contains("Second image"))
+        #expect(second.dataJSON.contains("ms-appx:///Assets/badge.png"))
+        #expect(!second.dataJSON.contains("ms-appx:///Assets/logo.png"))
+        #expect(second.resourceReferences.map(\.uri) == ["ms-appx:///Assets/badge.png"])
+    }
+
+    @Test
     func rejectsUnmappedSystemImage() throws {
+        let compiler = try AdaptiveCardCompiler(
+            resourceResolver: FixtureResourceResolver()
+        )
         let update = try makeUpdate(
             light: Image(systemName: "star"),
             dark: Image(systemName: "star")
-        )
-        let compiler = try AdaptiveCardCompiler(
-            resourceResolver: FixtureResourceResolver()
         )
 
         #expect(throws: AdaptiveCardCompilationError.self) {

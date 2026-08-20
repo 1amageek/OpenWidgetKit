@@ -6,6 +6,7 @@ package enum WindowsWidgetHostError: Error, Equatable, Sendable {
     case hostRejected(code: Int32, message: String)
     case staleGeneration(instanceID: String, generation: UInt64)
     case unknownInstance(String)
+    case shuttingDown
     case unsupportedAction(String)
     case packagingFailed(String)
 }

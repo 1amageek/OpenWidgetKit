@@ -97,7 +97,9 @@ package final class DynamicWindowsWidgetBridge: WindowsWidgetBridge, Sendable {
     package func invalidate(instanceID: String, generation: UInt64) throws {
         try Self.withByteSlice(instanceID) { instanceSlice in
             try Self.requireSuccess(
-                owk_bridge_invalidate(handle.pointer, instanceSlice, generation)
+                owk_bridge_invalidate(handle.pointer, instanceSlice, generation),
+                instanceID: instanceID,
+                generation: generation
             )
         }
     }
@@ -121,7 +123,9 @@ package final class DynamicWindowsWidgetBridge: WindowsWidgetBridge, Sendable {
                                 templateSlice,
                                 dataSlice,
                                 customStateSlice
-                            )
+                            ),
+                            instanceID: instanceID,
+                            generation: generation
                         )
                     }
                 }
@@ -132,7 +136,9 @@ package final class DynamicWindowsWidgetBridge: WindowsWidgetBridge, Sendable {
     package func remove(instanceID: String, generation: UInt64) throws {
         try Self.withByteSlice(instanceID) { instanceSlice in
             try Self.requireSuccess(
-                owk_bridge_remove(handle.pointer, instanceSlice, generation)
+                owk_bridge_remove(handle.pointer, instanceSlice, generation),
+                instanceID: instanceID,
+                generation: generation
             )
         }
     }
@@ -159,14 +165,21 @@ package final class DynamicWindowsWidgetBridge: WindowsWidgetBridge, Sendable {
         return try withByteSlice(value, body)
     }
 
-    private static func requireSuccess(_ result: OWKResult) throws {
+    private static func requireSuccess(
+        _ result: OWKResult,
+        instanceID: String? = nil,
+        generation: UInt64? = nil
+    ) throws {
         defer { release(result.message) }
-        guard result.code == 0 else {
-            let message = try decode(result.message.bytes)
-            throw WindowsWidgetHostError.hostRejected(
-                code: result.code,
-                message: message
-            )
+        guard result.code != 0 else { return }
+        let message = try decode(result.message.bytes)
+        if let error = WindowsWidgetBridgeStatus.error(
+            code: result.code,
+            message: message,
+            instanceID: instanceID,
+            generation: generation
+        ) {
+            throw error
         }
     }
 
@@ -210,7 +223,8 @@ private func openWidgetEventCallback(
             value = .create(
                 instanceID: instanceID,
                 kind: definitionID,
-                family: try runtimeFamily(event.widget_size)
+                family: try runtimeFamily(event.widget_size),
+                isActive: event.is_active != 0
             )
         case 2:
             value = .delete(instanceID: instanceID, customState: customState)
@@ -221,7 +235,8 @@ private func openWidgetEventCallback(
         case 5:
             value = .contextChanged(
                 instanceID: instanceID,
-                family: try runtimeFamily(event.widget_size)
+                family: try runtimeFamily(event.widget_size),
+                isActive: event.is_active != 0
             )
         case 6:
             value = .actionInvoked(
@@ -235,7 +250,8 @@ private func openWidgetEventCallback(
                 instanceID: instanceID,
                 kind: definitionID,
                 family: try runtimeFamily(event.widget_size),
-                isActive: event.is_active != 0
+                isActive: event.is_active != 0,
+                hasRetainedHostContent: !customState.isEmpty
             )
         case 8:
             value = .shutdownRequested

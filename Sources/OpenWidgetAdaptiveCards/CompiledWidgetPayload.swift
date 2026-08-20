@@ -5,20 +5,20 @@ package struct CompiledWidgetPayload: Equatable, Sendable {
     package let dataJSON: String
     package let structureIdentity: String
     package let resourceReferences: [AdaptiveCardResourceReference]
-    package let templateWasReused: Bool
+    package let templateCompilationWasSkipped: Bool
 
     package init(
         templateJSON: String,
         dataJSON: String,
         structureIdentity: String,
         resourceReferences: [AdaptiveCardResourceReference],
-        templateWasReused: Bool
+        templateCompilationWasSkipped: Bool
     ) {
         self.templateJSON = templateJSON
         self.dataJSON = dataJSON
         self.structureIdentity = structureIdentity
         self.resourceReferences = resourceReferences
-        self.templateWasReused = templateWasReused
+        self.templateCompilationWasSkipped = templateCompilationWasSkipped
     }
 }
 

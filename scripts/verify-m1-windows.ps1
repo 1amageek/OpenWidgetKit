@@ -3,10 +3,10 @@ Set-StrictMode -Version Latest
 
 $ExpectedSwiftVersion = "6.4-dev"
 $ExpectedTarget = "x86_64-unknown-windows-msvc"
-$ExpectedSnapshot = "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a"
-$ExpectedCompilerCommit = "db4e13695491982c8de74c36c5efb75bbc715987"
-$ExpectedCompilerDisplayCommit = "db4e13695491982"
-$ExpectedInstallerSHA256 = "C287DD533A65A73D657B1B9F2305BE50552F89B46199A0F6162A287DEE547149"
+$ExpectedSnapshot = "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a"
+$ExpectedCompilerCommit = "424cae54c1a10da79456ce66f330e6639439368f"
+$ExpectedCompilerDisplayCommit = "424cae54c1a10da"
+$ExpectedInstallerSHA256 = "17D5EBA8DFDC9E99BF13C0F26169022BE2F816B19E66D883A596D3512CFB0A04"
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {

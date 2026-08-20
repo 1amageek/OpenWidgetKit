@@ -5,12 +5,44 @@ import Synchronization
 package final class AdaptiveCardCompiler: Sendable {
     private struct CacheEntry: Sendable {
         let templateJSON: String
-        var lastAccess: UInt64
+        let structureIdentity: String
+        // The compiler emits placeholders and this plan together. Reusing the
+        // plan prevents the data path from independently reconstructing binding
+        // order when dynamic values change.
+        let bindingPlans: [VariantBindingPlan]
     }
 
     private struct CacheState: Sendable {
         var entries: [String: CacheEntry] = [:]
-        var accessCounter: UInt64 = 0
+        var recency: [String] = []
+
+        mutating func value(for key: String) -> CacheEntry? {
+            guard let value = entries[key] else { return nil }
+            markRecentlyUsed(key)
+            return value
+        }
+
+        mutating func insert(
+            _ value: CacheEntry,
+            for key: String,
+            capacity: Int
+        ) {
+            if entries[key] == nil,
+               entries.count >= capacity,
+               let leastRecentKey = recency.first {
+                entries.removeValue(forKey: leastRecentKey)
+                recency.removeFirst()
+            }
+            entries[key] = value
+            markRecentlyUsed(key)
+        }
+
+        private mutating func markRecentlyUsed(_ key: String) {
+            if let existingIndex = recency.firstIndex(of: key) {
+                recency.remove(at: existingIndex)
+            }
+            recency.append(key)
+        }
     }
 
     private enum Axis {
@@ -27,28 +59,56 @@ package final class AdaptiveCardCompiler: Sendable {
     private struct VariantOutput {
         let themeName: String
         let elements: [CanonicalJSON]
+        let bindingPlan: VariantBindingPlan
+    }
+
+    private struct VariantDataOutput {
+        let themeName: String
         let data: [String: CanonicalJSON]
         let resourceReferences: [AdaptiveCardResourceReference]
     }
 
+    private enum BindingRole: Sendable {
+        case text
+        case imageResource
+        case imageLabel
+    }
+
+    private struct BindingDescriptor: Sendable {
+        let key: String
+        let nodePath: [Int]
+        let role: BindingRole
+    }
+
+    private struct VariantBindingPlan: Sendable {
+        let themeName: String
+        let bindings: [BindingDescriptor]
+    }
+
     private struct VariantBuilder {
         let bindingNamespace: String
-        let document: WidgetDocument
-        let textResolver: any WidgetTextResolving
-        let resourceResolver: any AdaptiveCardResourceResolving
         var nextBinding = 0
-        var data: [String: CanonicalJSON] = [:]
-        var resourceReferences: [AdaptiveCardResourceReference] = []
+        var bindings: [BindingDescriptor] = []
 
-        mutating func bind(_ value: String) -> String {
+        mutating func bind(
+            nodePath: [Int],
+            role: BindingRole
+        ) -> String {
             let key = "v\(nextBinding)"
             nextBinding += 1
-            data[key] = .string(value)
+            bindings.append(
+                BindingDescriptor(
+                    key: key,
+                    nodePath: nodePath,
+                    role: role
+                )
+            )
             return "${\(bindingNamespace).\(key)}"
         }
 
         mutating func compile(
             node: WidgetNode,
+            nodePath: [Int],
             parentAxis: Axis,
             textStyle: TextStyle = TextStyle()
         ) throws -> [CanonicalJSON] {
@@ -58,10 +118,16 @@ package final class AdaptiveCardCompiler: Sendable {
                 return []
             case .text(let text):
                 try requireNoChildren(node, kind: "Text")
-                return [try compileText(text, inheritedStyle: textStyle)]
+                return [
+                    try compileText(
+                        text,
+                        nodePath: nodePath,
+                        inheritedStyle: textStyle
+                    )
+                ]
             case .image(let image):
                 try requireNoChildren(node, kind: "Image")
-                return [try compileImage(image)]
+                return [try compileImage(image, nodePath: nodePath)]
             case .color:
                 throw AdaptiveCardCompilationError.unsupportedNode(
                     "A standalone Color has no equivalent Adaptive Cards element."
@@ -69,6 +135,7 @@ package final class AdaptiveCardCompiler: Sendable {
             case .verticalStack(let alignment, let spacing):
                 let items = try compileChildren(
                     node.children,
+                    parentPath: nodePath,
                     axis: .vertical,
                     spacing: spacing,
                     textStyle: textStyle
@@ -91,6 +158,7 @@ package final class AdaptiveCardCompiler: Sendable {
                 }
                 let columns = try compileColumns(
                     node.children,
+                    parentPath: nodePath,
                     alignment: alignment,
                     spacing: spacing,
                     textStyle: textStyle
@@ -102,9 +170,10 @@ package final class AdaptiveCardCompiler: Sendable {
                     ])
                 ]
             case .group:
-                return try node.children.flatMap {
+                return try node.children.enumerated().flatMap { index, child in
                     try compile(
-                        node: $0,
+                        node: child,
+                        nodePath: nodePath + [index],
                         parentAxis: parentAxis,
                         textStyle: textStyle
                     )
@@ -145,6 +214,7 @@ package final class AdaptiveCardCompiler: Sendable {
                 return try compileModified(
                     modifier,
                     children: node.children,
+                    parentPath: nodePath,
                     parentAxis: parentAxis,
                     inheritedStyle: textStyle
                 )
@@ -158,6 +228,7 @@ package final class AdaptiveCardCompiler: Sendable {
                     alignment: alignment,
                     ignoredEdges: ignoredEdges,
                     foregroundCount: foregroundCount,
+                    nodePath: nodePath,
                     parentAxis: parentAxis,
                     textStyle: textStyle
                 )
@@ -166,12 +237,14 @@ package final class AdaptiveCardCompiler: Sendable {
 
         private mutating func compileText(
             _ text: WidgetText,
+            nodePath: [Int],
             inheritedStyle: TextStyle
         ) throws -> CanonicalJSON {
-            let resolved = try textResolver.resolve(text)
             var object: [String: CanonicalJSON] = [
                 "type": .string("TextBlock"),
-                "text": .string(bind(resolved)),
+                "text": .string(
+                    bind(nodePath: nodePath, role: .text)
+                ),
                 "wrap": .boolean(true)
             ]
             let font = text.font ?? inheritedStyle.font
@@ -202,32 +275,25 @@ package final class AdaptiveCardCompiler: Sendable {
         }
 
         private mutating func compileImage(
-            _ image: WidgetImage
+            _ image: WidgetImage,
+            nodePath: [Int]
         ) throws -> CanonicalJSON {
             guard image.isDecorative || image.label != nil else {
                 throw AdaptiveCardCompilationError.unsupportedNode(
                     "A Windows image must be decorative or provide an explicit accessibility label."
                 )
             }
-            guard let resource = document.resources[image.resourceID] else {
-                throw AdaptiveCardCompilationError.unresolvedResource(
-                    "The image node references a resource absent from its document."
-                )
-            }
-            let uri = try resourceResolver.resolve(resource)
-            try validateResourceURI(uri)
-            if !resourceReferences.contains(where: { $0.resource == resource }) {
-                resourceReferences.append(
-                    AdaptiveCardResourceReference(resource: resource, uri: uri)
-                )
-            }
             var object: [String: CanonicalJSON] = [
                 "type": .string("Image"),
-                "url": .string(bind(uri)),
+                "url": .string(
+                    bind(nodePath: nodePath, role: .imageResource)
+                ),
                 "size": .string("auto")
             ]
-            if let label = image.label {
-                object["altText"] = .string(bind(try textResolver.resolve(label)))
+            if image.label != nil {
+                object["altText"] = .string(
+                    bind(nodePath: nodePath, role: .imageLabel)
+                )
             } else if image.isDecorative {
                 object["altText"] = .string("")
             }
@@ -236,15 +302,17 @@ package final class AdaptiveCardCompiler: Sendable {
 
         private mutating func compileChildren(
             _ children: [WidgetNode],
+            parentPath: [Int],
             axis: Axis,
             spacing: CGFloat?,
             textStyle: TextStyle
         ) throws -> [CanonicalJSON] {
             let spacingName = try adaptiveSpacing(spacing)
             var elements: [CanonicalJSON] = []
-            for child in children {
+            for (index, child) in children.enumerated() {
                 let childElements = try compile(
                     node: child,
+                    nodePath: parentPath + [index],
                     parentAxis: axis,
                     textStyle: textStyle
                 )
@@ -260,13 +328,14 @@ package final class AdaptiveCardCompiler: Sendable {
 
         private mutating func compileColumns(
             _ children: [WidgetNode],
+            parentPath: [Int],
             alignment: WidgetVerticalAlignment,
             spacing: CGFloat?,
             textStyle: TextStyle
         ) throws -> [CanonicalJSON] {
             let spacingName = try adaptiveSpacing(spacing)
             var columns: [CanonicalJSON] = []
-            for child in children {
+            for (index, child) in children.enumerated() {
                 var column: [String: CanonicalJSON]
                 if case .spacer(let minLength) = child.kind {
                     try requireNoChildren(child, kind: "Spacer")
@@ -283,6 +352,7 @@ package final class AdaptiveCardCompiler: Sendable {
                 } else {
                     let items = try compile(
                         node: child,
+                        nodePath: parentPath + [index],
                         parentAxis: .vertical,
                         textStyle: textStyle
                     )
@@ -306,6 +376,7 @@ package final class AdaptiveCardCompiler: Sendable {
         private mutating func compileModified(
             _ modifier: WidgetModifier,
             children: [WidgetNode],
+            parentPath: [Int],
             parentAxis: Axis,
             inheritedStyle: TextStyle
         ) throws -> [CanonicalJSON] {
@@ -326,9 +397,10 @@ package final class AdaptiveCardCompiler: Sendable {
                     "Adaptive Cards 1.6 cannot preserve the complete SwiftUI frame constraint contract."
                 )
             }
-            return try children.flatMap {
+            return try children.enumerated().flatMap { index, child in
                 try compile(
-                    node: $0,
+                    node: child,
+                    nodePath: parentPath + [index],
                     parentAxis: parentAxis,
                     textStyle: style
                 )
@@ -340,6 +412,7 @@ package final class AdaptiveCardCompiler: Sendable {
             alignment: WidgetAlignment,
             ignoredEdges: WidgetEdge?,
             foregroundCount: Int,
+            nodePath: [Int],
             parentAxis: Axis,
             textStyle: TextStyle
         ) throws -> [CanonicalJSON] {
@@ -358,9 +431,10 @@ package final class AdaptiveCardCompiler: Sendable {
                     "M4 supports background only when it is a single semantic Color."
                 )
             }
-            let foregroundItems = try foreground.flatMap {
+            let foregroundItems = try foreground.enumerated().flatMap { index, child in
                 try compile(
-                    node: $0,
+                    node: child,
+                    nodePath: nodePath + [index],
                     parentAxis: parentAxis,
                     textStyle: textStyle
                 )
@@ -392,16 +466,6 @@ package final class AdaptiveCardCompiler: Sendable {
             guard node.children.isEmpty else {
                 throw AdaptiveCardCompilationError.invalidDocument(
                     "\(kind) unexpectedly contains child nodes."
-                )
-            }
-        }
-
-        private func validateResourceURI(_ uri: String) throws {
-            guard uri.hasPrefix("ms-appx:///"),
-                  !uri.contains(".."),
-                  !uri.contains("\\") else {
-                throw AdaptiveCardCompilationError.unresolvedResource(
-                    "M4 bundled resources require a normalized ms-appx:/// URI."
                 )
             }
         }
@@ -590,17 +654,46 @@ package final class AdaptiveCardCompiler: Sendable {
     package func compile(_ update: RuntimeWidgetUpdate) throws -> CompiledWidgetPayload {
         let documents = update.entry.documents
         try validate(documents: documents, family: update.family)
-        let outputs = try documents.map { document in
+        let cacheKey = templateCacheKey(
+            documents: documents,
+            family: update.family
+        )
+        // Dynamic text and resource identities are intentionally absent from
+        // this exact semantic key. Every hit still materializes them through
+        // the binding plan stored with the matching template.
+        let cachedEntry = cache.withLock { state in
+            state.value(for: cacheKey)
+        }
+        if let cachedEntry {
+            let dataOutputs = try materializeData(
+                documents: documents,
+                bindingPlans: cachedEntry.bindingPlans
+            )
+            return CompiledWidgetPayload(
+                templateJSON: cachedEntry.templateJSON,
+                dataJSON: try dataJSON(dataOutputs),
+                structureIdentity: cachedEntry.structureIdentity,
+                resourceReferences: resourceReferences(dataOutputs),
+                templateCompilationWasSkipped: true
+            )
+        }
+
+        let templateOutputs = try documents.map { document in
             try compileVariant(document)
         }.sorted {
             themeRank($0.themeName) < themeRank($1.themeName)
         }
+        let bindingPlans = templateOutputs.map(\.bindingPlan)
+        let dataOutputs = try materializeData(
+            documents: documents,
+            bindingPlans: bindingPlans
+        )
         let template = CanonicalJSON.object([
             "$schema": .string("http://adaptivecards.io/schemas/adaptive-card.json"),
             "type": .string("AdaptiveCard"),
             "version": .string(capabilities.schemaVersion),
             "body": .array(
-                outputs.map { output in
+                templateOutputs.map { output in
                     .object([
                         "type": .string("Container"),
                         "$when": .string(
@@ -620,44 +713,24 @@ package final class AdaptiveCardCompiler: Sendable {
                 "\(capabilities.compilerContractVersion):\(templateDescriptor)".utf8
             )
         )
-        let cached = cache.withLock { state -> (String, Bool) in
-            state.accessCounter &+= 1
-            if var entry = state.entries[templateDescriptor] {
-                entry.lastAccess = state.accessCounter
-                state.entries[templateDescriptor] = entry
-                return (entry.templateJSON, true)
-            }
-            if state.entries.count >= cacheCapacity,
-               let evicted = state.entries.min(by: {
-                   $0.value.lastAccess < $1.value.lastAccess
-               })?.key {
-                state.entries.removeValue(forKey: evicted)
-            }
-            state.entries[templateDescriptor] = CacheEntry(
-                templateJSON: templateDescriptor,
-                lastAccess: state.accessCounter
-            )
-            return (templateDescriptor, false)
-        }
-
-        let data = CanonicalJSON.object(
-            Dictionary(uniqueKeysWithValues: outputs.map {
-                ($0.themeName, CanonicalJSON.object($0.data))
-            })
+        let entry = CacheEntry(
+            templateJSON: templateDescriptor,
+            structureIdentity: structureIdentity,
+            bindingPlans: bindingPlans
         )
-        let references = outputs.flatMap(\.resourceReferences).reduce(
-            into: [AdaptiveCardResourceReference]()
-        ) { result, reference in
-            if !result.contains(reference) {
-                result.append(reference)
-            }
+        cache.withLock { state in
+            state.insert(
+                entry,
+                for: cacheKey,
+                capacity: cacheCapacity
+            )
         }
         return CompiledWidgetPayload(
-            templateJSON: cached.0,
-            dataJSON: try CanonicalJSONEncoder.string(data),
+            templateJSON: templateDescriptor,
+            dataJSON: try dataJSON(dataOutputs),
             structureIdentity: structureIdentity,
-            resourceReferences: references,
-            templateWasReused: cached.1
+            resourceReferences: resourceReferences(dataOutputs),
+            templateCompilationWasSkipped: false
         )
     }
 
@@ -670,21 +743,255 @@ package final class AdaptiveCardCompiler: Sendable {
         case .dark: themeName = "dark"
         }
         var builder = VariantBuilder(
-            bindingNamespace: themeName,
-            document: document,
-            textResolver: textResolver,
-            resourceResolver: resourceResolver
+            bindingNamespace: themeName
         )
         let elements = try builder.compile(
             node: document.root,
+            nodePath: [],
             parentAxis: .vertical
         )
         return VariantOutput(
             themeName: themeName,
             elements: elements,
-            data: builder.data,
-            resourceReferences: builder.resourceReferences
+            bindingPlan: VariantBindingPlan(
+                themeName: themeName,
+                bindings: builder.bindings
+            )
         )
+    }
+
+    private func materializeData(
+        documents: [WidgetDocument],
+        bindingPlans: [VariantBindingPlan]
+    ) throws -> [VariantDataOutput] {
+        try bindingPlans.map { bindingPlan in
+            guard let document = documents.first(where: {
+                themeName($0) == bindingPlan.themeName
+            }) else {
+                throw AdaptiveCardCompilationError.invalidDocument(
+                    "A cached binding plan has no matching theme document."
+                )
+            }
+            return try materializeData(
+                document: document,
+                bindingPlan: bindingPlan
+            )
+        }
+    }
+
+    private func materializeData(
+        document: WidgetDocument,
+        bindingPlan: VariantBindingPlan
+    ) throws -> VariantDataOutput {
+        var data: [String: CanonicalJSON] = [:]
+        var resourceReferences: [AdaptiveCardResourceReference] = []
+        var nextBindingIndex = 0
+        var nodePath: [Int] = []
+        try materializeBindings(
+            node: document.root,
+            nodePath: &nodePath,
+            document: document,
+            bindings: bindingPlan.bindings,
+            nextBindingIndex: &nextBindingIndex,
+            data: &data,
+            resourceReferences: &resourceReferences
+        )
+        guard nextBindingIndex == bindingPlan.bindings.count else {
+            throw bindingPlanMismatch()
+        }
+        return VariantDataOutput(
+            themeName: bindingPlan.themeName,
+            data: data,
+            resourceReferences: resourceReferences
+        )
+    }
+
+    private func materializeBindings(
+        node: WidgetNode,
+        nodePath: inout [Int],
+        document: WidgetDocument,
+        bindings: [BindingDescriptor],
+        nextBindingIndex: inout Int,
+        data: inout [String: CanonicalJSON],
+        resourceReferences: inout [AdaptiveCardResourceReference]
+    ) throws {
+        while nextBindingIndex < bindings.count,
+              bindings[nextBindingIndex].nodePath == nodePath {
+            let binding = bindings[nextBindingIndex]
+            switch binding.role {
+            case .text:
+                guard case .text(let text) = node.kind else {
+                    throw bindingPlanMismatch()
+                }
+                data[binding.key] = .string(try textResolver.resolve(text))
+            case .imageResource:
+                guard case .image(let image) = node.kind else {
+                    throw bindingPlanMismatch()
+                }
+                guard let resource = document.resources[image.resourceID] else {
+                    throw AdaptiveCardCompilationError.unresolvedResource(
+                        "The image node references a resource absent from its document."
+                    )
+                }
+                let uri = try resourceResolver.resolve(resource)
+                try validateResourceURI(uri)
+                if !resourceReferences.contains(where: { $0.resource == resource }) {
+                    resourceReferences.append(
+                        AdaptiveCardResourceReference(resource: resource, uri: uri)
+                    )
+                }
+                data[binding.key] = .string(uri)
+            case .imageLabel:
+                guard case .image(let image) = node.kind,
+                      let label = image.label else {
+                    throw bindingPlanMismatch()
+                }
+                data[binding.key] = .string(try textResolver.resolve(label))
+            }
+            nextBindingIndex += 1
+        }
+        guard nextBindingIndex < bindings.count else { return }
+        for (index, child) in node.children.enumerated() {
+            nodePath.append(index)
+            try materializeBindings(
+                node: child,
+                nodePath: &nodePath,
+                document: document,
+                bindings: bindings,
+                nextBindingIndex: &nextBindingIndex,
+                data: &data,
+                resourceReferences: &resourceReferences
+            )
+            nodePath.removeLast()
+        }
+    }
+
+    private func bindingPlanMismatch() -> AdaptiveCardCompilationError {
+        .invalidDocument(
+            "The document structure does not match its cached binding plan."
+        )
+    }
+
+    private func validateResourceURI(_ uri: String) throws {
+        guard uri.hasPrefix("ms-appx:///"),
+              !uri.contains(".."),
+              !uri.contains("\\") else {
+            throw AdaptiveCardCompilationError.unresolvedResource(
+                "M4 bundled resources require a normalized ms-appx:/// URI."
+            )
+        }
+    }
+
+    private func templateCacheKey(
+        documents: [WidgetDocument],
+        family: RuntimeWidgetFamily
+    ) -> String {
+        var components = [
+            "contract",
+            String(capabilities.compilerContractVersion),
+            "schema",
+            capabilities.schemaVersion,
+            "family",
+            String(family.rawValue)
+        ]
+        for document in documents.sorted(by: {
+            themeRank(themeName($0)) < themeRank(themeName($1))
+        }) {
+            components.append("theme")
+            components.append(themeName(document))
+            appendTemplateStructure(of: document.root, to: &components)
+        }
+        return components.joined(separator: "|")
+    }
+
+    private func appendTemplateStructure(
+        of node: WidgetNode,
+        to components: inout [String]
+    ) {
+        switch node.kind {
+        case .empty:
+            components.append("empty")
+        case .text(let text):
+            components.append("text")
+            components.append(text.font?.rawValue ?? "nil")
+            components.append(String(reflecting: text.foregroundColor))
+        case .image(let image):
+            components.append("image")
+            components.append(image.label == nil ? "unlabeled" : "labeled")
+            components.append(image.isDecorative ? "decorative" : "semantic")
+        case .color(let color):
+            components.append("color")
+            components.append(String(reflecting: color))
+        case .verticalStack(let alignment, let spacing):
+            components.append("verticalStack")
+            components.append(alignment.rawValue)
+            components.append(String(reflecting: spacing))
+        case .horizontalStack(let alignment, let spacing):
+            components.append("horizontalStack")
+            components.append(alignment.rawValue)
+            components.append(String(reflecting: spacing))
+        case .group:
+            components.append("group")
+        case .spacer(let minLength):
+            components.append("spacer")
+            components.append(String(reflecting: minLength))
+        case .divider:
+            components.append("divider")
+        case .modified(let modifier):
+            components.append("modified")
+            components.append(String(reflecting: modifier))
+        case .background(let alignment, let ignoredEdges, let foregroundCount):
+            components.append("background")
+            components.append(String(reflecting: alignment))
+            components.append(String(reflecting: ignoredEdges?.rawValue))
+            components.append(String(foregroundCount))
+        }
+        components.append("children")
+        components.append(String(node.children.count))
+        for child in node.children {
+            appendTemplateStructure(of: child, to: &components)
+        }
+        components.append("end")
+    }
+
+    private func themeName(_ document: WidgetDocument) -> String {
+        switch document.environment.colorScheme {
+        case .light: "light"
+        case .dark: "dark"
+        }
+    }
+
+    private func dataJSON(_ outputs: [VariantDataOutput]) throws -> String {
+        try encodedDataJSON(
+            outputs.map { ($0.themeName, $0.data) }
+        )
+    }
+
+    private func encodedDataJSON(
+        _ outputs: [(String, [String: CanonicalJSON])]
+    ) throws -> String {
+        let data = CanonicalJSON.object(
+            Dictionary(uniqueKeysWithValues: outputs.map {
+                ($0.0, CanonicalJSON.object($0.1))
+            })
+        )
+        return try CanonicalJSONEncoder.string(data)
+    }
+
+    private func resourceReferences(
+        _ outputs: [VariantDataOutput]
+    ) -> [AdaptiveCardResourceReference] {
+        deduplicatedResourceReferences(outputs.flatMap(\.resourceReferences))
+    }
+
+    private func deduplicatedResourceReferences(
+        _ references: [AdaptiveCardResourceReference]
+    ) -> [AdaptiveCardResourceReference] {
+        references.reduce(into: []) { result, reference in
+            if !result.contains(reference) {
+                result.append(reference)
+            }
+        }
     }
 
     private func validate(

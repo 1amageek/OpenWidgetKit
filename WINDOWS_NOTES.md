@@ -34,6 +34,22 @@ bridgeをSwift executableへ静的に混ぜず、`OpenWidgetWindowsBridge.dll`�
 | `Activate` | hostがupdateを必要とするactive state |
 | `Deactivate` | background workを抑制できるinactive state |
 
+Swift runtimeがinstance activityの正本です。`Deactivate`は進行中のprovider
+requestと将来のtimeline sleepを新しいgenerationでfenceしますが、Microsoftの
+contractどおりinactive中の明示的な`WidgetCenter` reloadは許可します。新規
+`CreateWidget`はinactiveでも初期contentを1回生成し、inactive startup recovery
+ではnonempty `CustomState`が以前のaccepted updateを示す場合だけWidgets Boardに保存済みの
+contentを維持してactivationまでworkを延期します。empty stateは初期contentを生成します。削除後も
+generation tombstoneをprocess lifetime中保持し、同じwidget IDが再生成された場合は
+strictly newer generationと完全なtemplateを要求します。
+起動時は既存instanceのrecovery eventをすべてqueueへ渡してから
+`CoResumeClassObjects`を呼び、Activate/ContextChangedがrecoveryを追い越さないようにします。
+MicrosoftのWidget Provider contractに従いclass factoryは`winrt::no_module_lock`で、
+`IClassFactory::LockServer`はprocess lifetimeを保持しません。生成されたprovider objectだけが
+custom server process counterを増減し、その参照がなくなった場合にshutdown eventを発行します。
+payloadを持たないshutdown eventはowner allocationを行わず、allocation failureでprocess終了が
+停止しない経路にします。
+
 Microsoftはcallback引数objectをcallback外で保持しないよう要求しています。bridgeは必要値を
 callback内でコピーします。
 
@@ -152,7 +168,7 @@ enqueueし、provider stateはactorで直列化します。
 - action handler中のreload;
 - shutdownとCOM callback;
 - provider completionの重複または遅延;
--古いgenerationのresource load完了。
+- 古いgenerationのresource load完了。
 
 外部callbackをactor state mutationの途中や`Mutex.withLock`内で呼ばないでください。
 
@@ -175,7 +191,8 @@ hostに残る場合、その事実を「更新成功」と表現しません。
 
 - action payloadを信頼せず、verb、instance、generation、payload shapeを検証する;
 - remote URLやimage URIはscheme/domain policyを持つ;
-- manifest resource pathをpackage root外へescapeさせない;
+- bundled resourceはpackage-relative pathだけを正本とし、`ms-appx:///` URIを導出する;
+- percent-decode後もidentityが変わらないURI-safe pathだけを許可し、package root外へescapeさせない;
 - diagnosticへtoken、cookie、完全なuser payloadを出さない;
 - JSON stringへ未検証値を手連結せず、encoderを使用する;
 - resource cacheのowner、eviction、shutdown releaseを明示する。
@@ -205,7 +222,7 @@ M5 source baselineは次の通りです。
 
 | Component | Pin |
 |---|---|
-| Swift Windows | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-01-a` |
+| Swift Windows | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a` |
 | Windows App SDK | `2.3.1` |
 | Widgets NuGet package | `2.0.5` |
 | Adaptive Cards host template | `1.6` |
@@ -241,6 +258,8 @@ Windows App SDKの`latest`だけを記録して再現性があると扱っては
 - [ ] light/dark themeを実表示する
 - [ ] create/activate/deactivate/deleteの順序差を検証する
 - [ ] context change中のstale updateを拒否する
+- [ ] inactive recovery、deactivate cancellation、inactive explicit reloadを検証する
+- [ ] delete/recreate時にold generationを拒否しcomplete templateを再送する
 - [ ] `Action.Execute`の正常/未知/期限切れactionを検証する
 - [ ] malformed JSONとhost rejectionを失敗として観測する
 - [ ] manifest/runtime metadata driftを自動検出する

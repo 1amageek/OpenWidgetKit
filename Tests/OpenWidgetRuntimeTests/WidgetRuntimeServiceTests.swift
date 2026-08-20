@@ -219,6 +219,148 @@ struct WidgetRuntimeServiceTests {
     }
 
     @Test
+    func inactiveRecoveryDefersProviderWorkUntilActivation() async throws {
+        let now = Date(timeIntervalSince1970: 550)
+        let clock = ManualWidgetClock(now: now)
+        let source = TimelineSource(timelines: [
+            try makeTimeline(marker: "activated", date: now, policy: .never)
+        ])
+        let (service, host) = try makeServiceAndHost(
+            source: source,
+            clock: clock
+        )
+
+        try await service.createInstance(
+            id: "instance",
+            kind: "kind",
+            configuration: makeConfiguration(),
+            isActive: false,
+            hasRetainedHostContent: true
+        )
+        for _ in 0..<20 { await Task.yield() }
+        let deferredRequestCount = await source.requestCount
+        let deferredUpdates = await host.updates
+        #expect(deferredRequestCount == 0)
+        #expect(deferredUpdates.isEmpty)
+
+        try await service.activateInstance(id: "instance")
+        try await waitUntil { await host.markers == ["activated"] }
+        let activatedRequestCount = await source.requestCount
+        #expect(activatedRequestCount == 1)
+        await service.shutdown()
+    }
+
+    @Test
+    func inactiveCreationPublishesInitialContentWithoutSchedulingFutureWork() async throws {
+        let now = Date(timeIntervalSince1970: 560)
+        let future = now.addingTimeInterval(60)
+        let clock = ManualWidgetClock(now: now)
+        let source = TimelineSource(timelines: [
+            try RuntimeTimeline(
+                entries: [
+                    makeEntry(marker: "initial", date: now),
+                    makeEntry(marker: "future", date: future)
+                ],
+                reloadPolicy: .never
+            )
+        ])
+        let (service, host) = try makeServiceAndHost(
+            source: source,
+            clock: clock
+        )
+
+        try await service.createInstance(
+            id: "instance",
+            kind: "kind",
+            configuration: makeConfiguration(),
+            isActive: false
+        )
+        try await waitUntil { await host.markers == ["initial"] }
+        for _ in 0..<20 { await Task.yield() }
+        let requestCount = await source.requestCount
+        let pendingSleeperCount = await clock.pendingSleeperCount
+        #expect(requestCount == 1)
+        #expect(pendingSleeperCount == 0)
+        await service.shutdown()
+    }
+
+    @Test
+    func deactivationFencesScheduledWorkAndExplicitReloadStillPublishes() async throws {
+        let now = Date(timeIntervalSince1970: 575)
+        let future = now.addingTimeInterval(60)
+        let clock = ManualWidgetClock(now: now)
+        let source = TimelineSource(timelines: [
+            try RuntimeTimeline(
+                entries: [
+                    makeEntry(marker: "initial", date: now),
+                    makeEntry(marker: "scheduled", date: future)
+                ],
+                reloadPolicy: .never
+            ),
+            try makeTimeline(marker: "explicit", date: now, policy: .never)
+        ])
+        let (service, host) = try makeServiceAndHost(
+            source: source,
+            clock: clock
+        )
+
+        try await service.createInstance(
+            id: "instance",
+            kind: "kind",
+            configuration: makeConfiguration()
+        )
+        try await waitUntil { await host.markers == ["initial"] }
+        try await waitUntil { await clock.pendingSleeperCount == 1 }
+
+        try await service.deactivateInstance(id: "instance")
+        try await waitUntil { await clock.pendingSleeperCount == 0 }
+        await clock.advance(to: future)
+        for _ in 0..<20 { await Task.yield() }
+        let markersAfterDeactivation = await host.markers
+        #expect(markersAfterDeactivation == ["initial"])
+
+        await service.reload(instanceID: "instance")
+        try await waitUntil { await host.markers == ["initial", "explicit"] }
+        let explicitRequestCount = await source.requestCount
+        #expect(explicitRequestCount == 2)
+        await service.shutdown()
+    }
+
+    @Test
+    func recreatedIdentifierUsesANewerLifetimeGeneration() async throws {
+        let now = Date(timeIntervalSince1970: 590)
+        let clock = ManualWidgetClock(now: now)
+        let source = TimelineSource(timelines: [
+            try makeTimeline(marker: "first", date: now, policy: .never),
+            try makeTimeline(marker: "second", date: now, policy: .never)
+        ])
+        let (service, host) = try makeServiceAndHost(
+            source: source,
+            clock: clock
+        )
+
+        try await service.createInstance(
+            id: "instance",
+            kind: "kind",
+            configuration: makeConfiguration()
+        )
+        try await waitUntil { await host.markers == ["first"] }
+        await service.deleteInstance(id: "instance")
+        try await service.createInstance(
+            id: "instance",
+            kind: "kind",
+            configuration: makeConfiguration()
+        )
+        try await waitUntil { await host.markers == ["first", "second"] }
+
+        let invalidations = await host.invalidations
+        let removals = await host.removals
+        #expect(invalidations == [1, 3])
+        #expect(removals == [2])
+        await service.shutdown()
+    }
+
+    @Test
     func nonAdvancingAutomaticReloadStopsWithoutSpinning() async throws {
         let now = Date(timeIntervalSince1970: 600)
         let clock = ManualWidgetClock(now: now)
@@ -505,6 +647,8 @@ private actor RecordingHost: RuntimeWidgetHost {
 
     private var states: [String: InstanceState] = [:]
     private(set) var updates: [RuntimeWidgetUpdate] = []
+    private(set) var invalidations: [UInt64] = []
+    private(set) var removals: [UInt64] = []
 
     var markers: [String] {
         updates.compactMap { update in
@@ -516,6 +660,7 @@ private actor RecordingHost: RuntimeWidgetHost {
 
     func invalidate(instanceID: String, generation: UInt64) {
         guard generation >= (states[instanceID]?.generation ?? 0) else { return }
+        invalidations.append(generation)
         states[instanceID] = InstanceState(
             generation: generation,
             isRemoved: false
@@ -531,6 +676,7 @@ private actor RecordingHost: RuntimeWidgetHost {
 
     func remove(instanceID: String, generation: UInt64) {
         guard generation >= (states[instanceID]?.generation ?? 0) else { return }
+        removals.append(generation)
         states[instanceID] = InstanceState(
             generation: generation,
             isRemoved: true

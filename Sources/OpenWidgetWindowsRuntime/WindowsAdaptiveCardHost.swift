@@ -21,21 +21,28 @@ package actor WindowsAdaptiveCardHost: RuntimeWidgetHost {
     }
 
     package func invalidate(instanceID: String, generation: UInt64) throws {
-        let structureIdentity = fences[instanceID]?.structureIdentity
+        var structureIdentity = fences[instanceID]?.structureIdentity
         if let fence = fences[instanceID] {
-            guard !fence.isDeleted, generation >= fence.generation else {
+            guard generation >= fence.generation,
+                  !fence.isDeleted || generation > fence.generation else {
                 throw WindowsWidgetHostError.staleGeneration(
                     instanceID: instanceID,
                     generation: generation
                 )
             }
+            if fence.isDeleted {
+                // A recreated widget has no host-accepted template from its
+                // previous lifetime, even when its semantic structure matches.
+                structureIdentity = nil
+            }
         }
-        fences[instanceID] = Fence(
+        let nextFence = Fence(
             generation: generation,
             isDeleted: false,
             structureIdentity: structureIdentity
         )
         try bridge.invalidate(instanceID: instanceID, generation: generation)
+        fences[instanceID] = nextFence
     }
 
     package func apply(_ update: RuntimeWidgetUpdate) throws {
@@ -70,6 +77,8 @@ package actor WindowsAdaptiveCardHost: RuntimeWidgetHost {
                 generation: generation
             )
         }
+        // Deletion is fail-closed: the host callback already established that
+        // this lifetime ended, so a bridge cleanup failure must not reopen it.
         fences[instanceID] = Fence(
             generation: generation,
             isDeleted: true,

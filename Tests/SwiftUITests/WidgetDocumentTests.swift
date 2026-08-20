@@ -192,6 +192,52 @@ struct WidgetDocumentTests {
     }
 
     @Test
+    func identityEvaluationPrunesUnusedValuesAndRollsBackFailures() throws {
+        let identityStore = WidgetIdentityStore()
+
+        _ = try makeWidgetDocument(
+            ItemList(items: [Item(id: 1), Item(id: 2)]),
+            identityStore: identityStore
+        )
+        #expect(identityStore.retainedIdentifierCount == 2)
+
+        _ = try makeWidgetDocument(
+            ItemList(items: [Item(id: 2)]),
+            identityStore: identityStore
+        )
+        #expect(identityStore.retainedIdentifierCount == 1)
+
+        #expect(throws: WidgetSemanticError.duplicateStableID(typeName: "Swift.Int")) {
+            try makeWidgetDocument(
+                ItemList(items: [Item(id: 3), Item(id: 3)]),
+                identityStore: identityStore
+            )
+        }
+        #expect(identityStore.retainedIdentifierCount == 1)
+    }
+
+    @Test
+    func nestedIdentityEvaluationRollsBackOnlyTheFailedFrame() throws {
+        let identityStore = WidgetIdentityStore()
+        let namespace = WidgetNodeID(components: [.role("fixture")])
+
+        try identityStore.withEvaluation {
+            _ = try identityStore.identifier(for: 1, namespace: namespace)
+            do {
+                try identityStore.withEvaluation {
+                    _ = try identityStore.identifier(for: 2, namespace: namespace)
+                    throw IdentityFixtureError.expectedFailure
+                }
+            } catch IdentityFixtureError.expectedFailure {
+                // The outer evaluation intentionally continues after rollback.
+            }
+            _ = try identityStore.identifier(for: 3, namespace: namespace)
+        }
+
+        #expect(identityStore.retainedIdentifierCount == 2)
+    }
+
+    @Test
     func rejectsDuplicateForEachIdentity() {
         #expect(throws: WidgetSemanticError.duplicateStableID(typeName: "Swift.Int")) {
             try makeWidgetDocument(
@@ -315,6 +361,10 @@ private struct UnsupportedPrimitive: View {
 
 private enum FixtureEnvironmentKey: EnvironmentKey {
     static let defaultValue = 0
+}
+
+private enum IdentityFixtureError: Error {
+    case expectedFailure
 }
 
 private extension EnvironmentValues {

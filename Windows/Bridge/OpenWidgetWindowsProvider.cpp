@@ -175,10 +175,12 @@ public:
         try {
             std::lock_guard lock(instance_mutex_);
             auto& instance = instances_[std::move(widget_id)];
-            if (instance.deleted || generation < instance.generation) {
+            if (generation < instance.generation
+                || (instance.deleted && generation <= instance.generation)) {
                 return failure(OWK_STATUS_STALE_GENERATION, "Stale widget generation.");
             }
             instance.generation = generation;
+            instance.deleted = false;
             return success();
         } catch (...) {
             return current_exception();
@@ -231,6 +233,18 @@ public:
                         options.Data(winrt::to_hstring(data_json));
                         options.CustomState(winrt::to_hstring(custom_state));
                         providers::WidgetManager::GetDefault().UpdateWidget(options);
+                        {
+                            std::lock_guard lock(instance_mutex_);
+                            auto iterator = instances_.find(widget_id);
+                            if (iterator == instances_.end()
+                                || iterator->second.deleted
+                                || iterator->second.generation != generation) {
+                                return failure(
+                                    OWK_STATUS_STALE_GENERATION,
+                                    "The widget lifetime changed while the host update was in flight."
+                                );
+                            }
+                        }
                         return success();
                     } catch (...) {
                         return current_exception();
@@ -261,30 +275,13 @@ public:
 
     void host_created(std::string const& widget_id) {
         std::lock_guard lock(instance_mutex_);
-        instances_[widget_id] = InstanceState{};
+        instances_.try_emplace(widget_id);
     }
 
     void host_deleted(std::string const& widget_id) {
-        {
-            std::lock_guard lock(instance_mutex_);
-            auto& instance = instances_[widget_id];
-            instance.deleted = true;
-        }
-        auto barrier = enqueue_and_wait([]() noexcept { return success(); });
-        if (barrier.code != OWK_STATUS_OK) {
-            std::string message = "The provider delete barrier failed.";
-            if (barrier.message.bytes.data != nullptr
-                && barrier.message.bytes.count > 0) {
-                message.assign(
-                    reinterpret_cast<const char*>(barrier.message.bytes.data),
-                    barrier.message.bytes.count
-                );
-            }
-            diagnostic(barrier.code, std::move(message));
-        }
-        if (barrier.message.release_owner != nullptr) {
-            barrier.message.release_owner(barrier.message.owner);
-        }
+        std::lock_guard lock(instance_mutex_);
+        auto& instance = instances_[widget_id];
+        instance.deleted = true;
     }
 
     void emit(
@@ -304,6 +301,25 @@ public:
             }
         }
         if (callbacks_.on_event == nullptr) {
+            return;
+        }
+        if (kind == OWK_EVENT_SHUTDOWN_REQUESTED) {
+            // Shutdown has no payload and must not depend on heap allocation;
+            // otherwise an allocation failure can leave run() waiting forever.
+            const OWKByteSlice empty{nullptr, 0};
+            const OWKWidgetEvent event{
+                kind,
+                empty,
+                empty,
+                empty,
+                empty,
+                empty,
+                OWK_WIDGET_SIZE_UNKNOWN,
+                0,
+                nullptr,
+                nullptr
+            };
+            callbacks_.on_event(callbacks_.context, &event);
             return;
         }
         auto owner = new (std::nothrow) EventOwner{
@@ -635,6 +651,9 @@ struct ProviderFactory final :
     }
 
     HRESULT __stdcall LockServer(BOOL) noexcept final {
+        // The Windows Widget Provider factory is intentionally no_module_lock.
+        // Created provider objects participate in the custom process lock;
+        // the class factory does not keep the local server alive by itself.
         return S_OK;
     }
 
@@ -663,26 +682,27 @@ OWKResult BridgeState::run() {
                 &cookie
             )
         );
+        // Restore every existing instance before the class object becomes
+        // callable. This preserves a single lifecycle order in Swift: all
+        // recovery events are queued before any host callback can be accepted.
+        for (auto const& info : providers::WidgetManager::GetDefault().GetWidgetInfos()) {
+            auto context = info.WidgetContext();
+            auto widget_id = winrt::to_string(context.Id());
+            host_created(widget_id);
+            emit(
+                OWK_EVENT_RECOVER,
+                std::move(widget_id),
+                winrt::to_string(context.DefinitionId()),
+                winrt::to_string(info.CustomState()),
+                {},
+                {},
+                widget_size(context),
+                context.IsActive()
+            );
+        }
+
         const auto resumed = resume_class_objects_if_running();
         winrt::check_hresult(resumed);
-
-        if (resumed != S_FALSE) {
-            for (auto const& info : providers::WidgetManager::GetDefault().GetWidgetInfos()) {
-                auto context = info.WidgetContext();
-                auto widget_id = winrt::to_string(context.Id());
-                host_created(widget_id);
-                emit(
-                    OWK_EVENT_RECOVER,
-                    std::move(widget_id),
-                    winrt::to_string(context.DefinitionId()),
-                    winrt::to_string(info.CustomState()),
-                    {},
-                    {},
-                    widget_size(context),
-                    context.IsActive()
-                );
-            }
-        }
 
         DWORD event_index = 0;
         HANDLE events[] = {shutdown_completed_.get()};

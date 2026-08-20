@@ -44,7 +44,7 @@ package struct OpenWidgetProviderConfiguration: Codable, Equatable, Sendable {
     }
 
     package func validateMetadata() throws {
-        guard schemaVersion == 1 else {
+        guard schemaVersion == 2 else {
             throw WindowsWidgetHostError.invalidConfiguration(
                 "Unsupported provider configuration schema '\(schemaVersion)'."
             )
@@ -66,7 +66,7 @@ package struct OpenWidgetProviderConfiguration: Codable, Equatable, Sendable {
             }
         }
         var resourceNames: Set<String> = []
-        var resourceURIs: Set<String> = []
+        var resourcePaths: Set<String> = []
         for resource in resources {
             try resource.validate()
             guard resourceNames.insert(resource.name).inserted else {
@@ -74,9 +74,9 @@ package struct OpenWidgetProviderConfiguration: Codable, Equatable, Sendable {
                     "Duplicate resource name '\(resource.name)'."
                 )
             }
-            guard resourceURIs.insert(resource.uri).inserted else {
+            guard resourcePaths.insert(resource.path).inserted else {
                 throw WindowsWidgetHostError.invalidConfiguration(
-                    "Duplicate resource URI '\(resource.uri)'."
+                    "Duplicate resource path '\(resource.path)'."
                 )
             }
         }
@@ -398,13 +398,10 @@ package struct WindowsWidgetFamilyConfiguration: Codable, Equatable, Sendable {
 
 package struct WindowsWidgetResourceConfiguration: Codable, Equatable, Sendable {
     package let name: String
-    package let uri: String
     package let path: String
 
-    private enum CodingKeys: String, CodingKey {
-        case name
-        case uri = "URI"
-        case path
+    package var uri: String {
+        "ms-appx:///\(path)"
     }
 
     package func validate() throws {
@@ -414,11 +411,16 @@ package struct WindowsWidgetResourceConfiguration: Codable, Equatable, Sendable 
             )
         }
         try WindowsWidgetProviderIdentity.validateRelativePackagePath(path)
-        guard uri == "ms-appx:///\(path)",
-              !uri.contains(".."),
-              !uri.contains("\\") else {
+        guard path.unicodeScalars.allSatisfy({ scalar in
+            switch scalar.value {
+            case 45, 46, 47, 48...57, 65...90, 95, 97...122, 126:
+                true
+            default:
+                false
+            }
+        }) else {
             throw WindowsWidgetHostError.invalidConfiguration(
-                "Resource '\(name)' must use a normalized ms-appx:/// URI."
+                "Resource '\(name)' must use an ASCII URI-safe package path."
             )
         }
     }
@@ -479,7 +481,7 @@ private enum OpenWidgetConfigurationKeyValidator {
         try validateArray(root["resources"], path: "$.resources") { value, path in
             try validateObject(
                 value,
-                allowed: ["name", "URI", "path"],
+                allowed: ["name", "path"],
                 path: path
             )
         }

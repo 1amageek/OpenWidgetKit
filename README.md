@@ -41,14 +41,31 @@ template cache. M5 adds the narrow C ABI, dynamically loaded C++/WinRT
 generation-safe `WidgetManager` updates, a single provider configuration, and
 deterministic MSIX manifest tooling.
 
-The M4 compiler passes 10 focused Native tests and builds for normal WASM with
+The M4 compiler passes 12 focused Native tests and builds for normal WASM with
 the pinned Swift 6.4 snapshot and matching SDK. The M5 Swift host and manifest
-surface passes 5 focused Native tests. These checks do not compile or execute
+surface passes 12 focused Native tests, including three consecutive warm runs
+of the target after the lifecycle review. These checks do not compile or execute
 the C++/WinRT provider. The previously verified Windows M1 baseline therefore
 does not prove the new provider, x64/ARM64 link, unsigned MSIX, or Widgets Board
 behavior. The checked-in `M5 Windows Provider Build` workflow is the target
 build gate; M6 remains the signed install and real Widgets Board acceptance
 milestone.
+
+The latest lifecycle review corrected or clarified inactive-state suppression,
+retained-content-aware recovery, monotonic
+delete/recreate generations, complete-template reset for a new instance
+lifetime, retryable shutdown completion state, accepted-invalidation and
+fail-closed-removal host fences, recovery-before-COM-activation ordering, a
+documented `no_module_lock` class-factory boundary, a reentrancy-safe C++ delete
+fence, a zero-allocation shutdown callback, typed C ABI status preservation, a valid
+packaged-COM ignorable namespace, and bounded transactional `ForEach` identity
+retention. Resource paths are now the single source for derived `ms-appx:///`
+URIs. The bounded LRU cache now derives an exact semantic structure key before
+template compilation. Each cache entry retains the binding plan emitted by that
+same compilation, so cache hits reevaluate dynamic data and resource ownership
+without rebuilding the template tree or JSON and without independently
+reconstructing binding order. The accompanying regression tests pass as part of
+the 74-test Native suite.
 
 Package structure or import availability must not be treated as evidence of
 implementation completion. See
@@ -162,7 +179,7 @@ rasterization should depend on OpenCoreGraphics.
 
 ## Scope
 
-The first production milestone includes:
+The first static production milestone includes:
 
 - `StaticConfiguration`;
 - `TimelineEntry`, `TimelineProvider`, `Timeline`, and `TimelineReloadPolicy`;
@@ -170,7 +187,8 @@ The first production milestone includes:
 - timeline reload through `WidgetCenter`;
 - the limited SwiftUI View DSL required by widgets;
 - Adaptive Cards template and data generation for Windows Widgets;
-- registration, updates, actions, and shutdown as a packaged Win32 Provider.
+- registration, updates, activation/deactivation, and shutdown as a packaged
+  Win32 Provider.
 
 The first milestone does not include:
 
@@ -180,6 +198,11 @@ The first milestone does not include:
 - complete visual parity for every SwiftUI view and modifier;
 - frame animation through OpenCoreAnimation;
 - a Web Widget backend that requires remote HTML.
+
+Interactive views, `Action.Execute` compilation, and action routing are the M7
+production milestone. Until that surface exists, an unexpected host action is
+reported as an explicit typed unsupported failure and is never treated as a
+successful no-op.
 
 ## Authoritative references
 
@@ -208,7 +231,7 @@ official Swift references:
 
 The M5 source pins Windows App SDK 2.3.1, Widgets package 2.0.5, Visual C++ v143,
 Windows SDK 10.0.26100.0, and the currently verified Windows Swift 6.4
-development snapshot from 2026-08-01. The packaging gate verifies exact NuGet
+development snapshot from 2026-08-14. The packaging gate verifies exact NuGet
 hashes and discovers Swift/Foundation DLLs from the final executable and that
 same toolchain; it rejects mixed copies rather than using an unrelated fixed DLL
 directory.
