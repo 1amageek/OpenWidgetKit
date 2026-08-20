@@ -44,7 +44,7 @@ package struct OpenWidgetProviderConfiguration: Codable, Equatable, Sendable {
     }
 
     package func validateMetadata() throws {
-        guard schemaVersion == 4 else {
+        guard schemaVersion == 5 else {
             throw WindowsWidgetHostError.invalidConfiguration(
                 "Unsupported provider configuration schema '\(schemaVersion)'."
             )
@@ -169,6 +169,7 @@ package struct WindowsWidgetBuildConfiguration: Codable, Equatable, Sendable {
     package let windowsAppSDKVersion: String
     package let widgetsPackageVersion: String
     package let cppWinRTVersion: String
+    package let wixToolsetSDKVersion: String
     package let windowsAppRuntimePackageName: String
     package let windowsAppRuntimePublisher: String
     package let windowsAppRuntimeMinVersion: String
@@ -186,6 +187,7 @@ package struct WindowsWidgetBuildConfiguration: Codable, Equatable, Sendable {
         guard Self.isDottedVersion(windowsAppSDKVersion, componentCount: 3),
               Self.isDottedVersion(widgetsPackageVersion, componentCount: 3),
               Self.isDottedVersion(cppWinRTVersion, componentCount: 4),
+              Self.isDottedVersion(wixToolsetSDKVersion, componentCount: 3),
               Self.isDottedVersion(windowsAppRuntimeMinVersion, componentCount: 4),
               Self.isDottedVersion(windowsSDKVersion, componentCount: 4) else {
             throw WindowsWidgetHostError.invalidConfiguration(
@@ -463,7 +465,8 @@ private enum OpenWidgetConfigurationKeyValidator {
             root["build"],
             allowed: [
                 "swiftSnapshot", "swiftToolchainIdentifier", "windowsAppSDKVersion",
-                "widgetsPackageVersion", "cppWinRTVersion", "visualCToolset",
+                "widgetsPackageVersion", "cppWinRTVersion", "wixToolsetSDKVersion",
+                "visualCToolset",
                 "windowsAppRuntimePackageName", "windowsAppRuntimePublisher",
                 "windowsAppRuntimeMinVersion", "windowsSDKVersion",
                 "foundationLinkMode"

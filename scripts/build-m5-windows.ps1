@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $ConfigurationTemplate = Join-Path $RepositoryRoot "Windows\Packaging\OpenWidgetProvider.json"
 $BridgeProject = Join-Path $RepositoryRoot "Windows\Bridge\OpenWidgetWindowsBridge.vcxproj"
+$SwiftRuntimeProject = Join-Path $RepositoryRoot "Windows\Packaging\SwiftRuntime\OpenWidgetSwiftRuntime.wixproj"
 $SwiftTriple = if ($Architecture -eq "x64") {
     "x86_64-unknown-windows-msvc"
 } else {
@@ -36,6 +37,9 @@ if (Test-Path $OutputDirectory) {
 $StagingDirectory = Join-Path $OutputDirectory "staging"
 $BridgeOutput = Join-Path $OutputDirectory "bridge"
 $BridgeIntermediate = Join-Path $OutputDirectory "bridge-obj"
+$SwiftRuntimeOutput = Join-Path $OutputDirectory "swift-runtime-msi"
+$SwiftRuntimeIntermediate = Join-Path $OutputDirectory "swift-runtime-obj"
+$SwiftRuntimeImage = Join-Path $OutputDirectory "swift-runtime-image"
 $InspectionDirectory = Join-Path $OutputDirectory "inspection"
 $EvidencePath = Join-Path $OutputDirectory "m5-build-evidence.json"
 $MSIXPath = Join-Path $OutputDirectory "OpenWidgetKit-$Architecture.msix"
@@ -165,65 +169,184 @@ function Write-FixtureAssets {
     }
 }
 
-function Get-ToolchainRuntimeFiles {
+function Assert-PEMachine {
     param(
-        [string]$Executable,
-        [object]$TargetInfo,
-        [string]$Destination
+        [string[]]$Files,
+        [string]$TargetArchitecture
     )
-    $SearchRoots = @(
-        $TargetInfo.paths.runtimeLibraryPaths
-        $TargetInfo.paths.runtimeLibraryImportPaths
-        $TargetInfo.paths.runtimeResourcePath
-        $env:SDKROOT
-    ) | Where-Object { $_ -and (Test-Path $_) } | Sort-Object -Unique
+    $MachinePattern = if ($TargetArchitecture -eq "x64") {
+        '(?im)^\s*8664 machine \(x64\)'
+    } else {
+        '(?im)^\s*AA64 machine \(ARM64\)'
+    }
+    foreach ($File in $Files) {
+        $Headers = (& dumpbin /nologo /headers $File | Out-String)
+        if ($LASTEXITCODE -ne 0 -or $Headers -notmatch $MachinePattern) {
+            throw "'$File' does not contain the expected $TargetArchitecture PE machine."
+        }
+    }
+}
+
+function Assert-RuntimeDependencyClosure {
+    param(
+        [string[]]$EntryPoints,
+        [object[]]$RuntimeFiles
+    )
+    $RuntimeByName = @{}
+    foreach ($RuntimeFile in $RuntimeFiles) {
+        $Key = $RuntimeFile.Name.ToLowerInvariant()
+        if ($RuntimeByName.ContainsKey($Key)) {
+            throw "The Swift runtime administrative image contains duplicate '$($RuntimeFile.Name)' files."
+        }
+        $RuntimeByName[$Key] = $RuntimeFile.Source
+    }
     $Pending = [Collections.Generic.Queue[string]]::new()
-    $Pending.Enqueue($Executable)
-    $Resolved = @{}
+    foreach ($EntryPoint in $EntryPoints) {
+        $Pending.Enqueue($EntryPoint)
+    }
+    $Inspected = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase
+    )
     while ($Pending.Count -gt 0) {
         $Binary = $Pending.Dequeue()
+        if (-not $Inspected.Add($Binary)) { continue }
         $Dependents = (& dumpbin /nologo /dependents $Binary | Out-String) -split "`r?`n" |
             ForEach-Object { $_.Trim() } |
             Where-Object { $_ -match '^[A-Za-z0-9_.+-]+\.dll$' } |
             Sort-Object -Unique
         foreach ($Dependent in $Dependents) {
-            if ($Resolved.ContainsKey($Dependent)) { continue }
-            $Matches = @(
-                foreach ($Root in $SearchRoots) {
-                    Get-ChildItem -Path $Root -Filter $Dependent -File -Recurse -ErrorAction SilentlyContinue
-                }
-            ) | Sort-Object FullName -Unique
-            if (-not $Matches) {
-                if ($Dependent -match '^(Foundation|swift|dispatch|BlocksRuntime|icu)') {
-                    throw "Toolchain runtime dependency '$Dependent' was not found."
-                }
-                continue
+            $Key = $Dependent.ToLowerInvariant()
+            if ($RuntimeByName.ContainsKey($Key)) {
+                $Pending.Enqueue($RuntimeByName[$Key])
+            } elseif ($Dependent -match '^(Foundation|swift|dispatch|BlocksRuntime|icu|_Foundation)') {
+                throw "The Swift redistributable does not close runtime dependency '$Dependent'."
             }
-            $Hashes = @($Matches | ForEach-Object {
-                (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash
-            } | Sort-Object -Unique)
-            if ($Hashes.Count -ne 1) {
-                throw "Mixed toolchain runtime versions were found for '$Dependent'."
-            }
-            $Source = $Matches[0].FullName
-            $Target = Join-Path $Destination $Dependent
-            if (Test-Path $Target) {
-                $ExistingHash = (Get-FileHash -Algorithm SHA256 -Path $Target).Hash
-                if ($ExistingHash -ne $Hashes[0]) {
-                    throw "Staging already contains a different '$Dependent'."
-                }
-            } else {
-                Copy-Item -Path $Source -Destination $Target
-            }
-            $Resolved[$Dependent] = [PSCustomObject]@{
-                Name = $Dependent
-                Source = $Source
-                SHA256 = $Hashes[0]
-            }
-            $Pending.Enqueue($Source)
         }
     }
-    return @($Resolved.Values | Sort-Object Name)
+}
+
+function Expand-SwiftRuntimeRedistributable {
+    param(
+        [string]$TargetArchitecture,
+        [object]$BuildConfiguration,
+        [string]$Destination
+    )
+    $SDKDirectory = [IO.DirectoryInfo]::new([IO.Path]::GetFullPath($env:SDKROOT))
+    $PlatformVersionDirectory = $SDKDirectory.Parent.Parent.Parent.Parent
+    if ($null -eq $PlatformVersionDirectory) {
+        throw "SDKROOT does not have the expected Swift platform layout."
+    }
+    $SwiftInstallDirectory = $PlatformVersionDirectory.Parent.Parent
+    if ($null -eq $SwiftInstallDirectory) {
+        throw "The Swift installation root could not be derived from SDKROOT."
+    }
+    $RedistributablesDirectory = Join-Path `
+        $SwiftInstallDirectory.FullName `
+        "Redistributables\$($PlatformVersionDirectory.Name)"
+    $MergeModuleArchitecture = if ($TargetArchitecture -eq "x64") {
+        "amd64"
+    } else {
+        "arm64"
+    }
+    $MergeModuleName = "rtl.dynamic.private.$MergeModuleArchitecture.msm"
+    $MergeModules = @(
+        Get-ChildItem -Path $RedistributablesDirectory `
+            -Filter $MergeModuleName -File -Recurse -ErrorAction SilentlyContinue
+    )
+    if ($MergeModules.Count -ne 1) {
+        throw "Expected one '$MergeModuleName' in the pinned Swift redistributables; found $($MergeModules.Count)."
+    }
+    $MergeModule = $MergeModules[0]
+
+    [xml]$RuntimeProjectDocument = Get-Content -Raw $SwiftRuntimeProject
+    $ExpectedWixSDK = "WixToolset.Sdk/$($BuildConfiguration.wixToolsetSDKVersion)"
+    if ($RuntimeProjectDocument.Project.Sdk -ne $ExpectedWixSDK) {
+        throw "The Swift runtime WiX project does not match the configured SDK pin."
+    }
+
+    Invoke-Checked msbuild @(
+        $SwiftRuntimeProject,
+        "/restore",
+        "/p:Configuration=Release",
+        "/p:Platform=$MSBuildPlatform",
+        "/p:SwiftRuntimeMergeModule=$($MergeModule.FullName)",
+        "/p:OutputPath=$SwiftRuntimeOutput\",
+        "/p:BaseIntermediateOutputPath=$SwiftRuntimeIntermediate\",
+        "/p:RestoreForceEvaluate=true"
+    )
+    $NuGetRoot = if ($env:NUGET_PACKAGES) {
+        $env:NUGET_PACKAGES
+    } else {
+        Join-Path $env:USERPROFILE ".nuget\packages"
+    }
+    $WixPackagePath = Join-Path $NuGetRoot `
+        "wixtoolset.sdk\$($BuildConfiguration.wixToolsetSDKVersion)\wixtoolset.sdk.$($BuildConfiguration.wixToolsetSDKVersion).nupkg"
+    if (-not (Test-Path $WixPackagePath)) {
+        throw "The pinned WiX Toolset SDK package was not restored."
+    }
+    $WixPackageHash = (Get-FileHash -Algorithm SHA256 -Path $WixPackagePath).Hash
+    if ($WixPackageHash -ne "AF8F72FB2550E9C2CF00B6EAF5E3ED811514AA2B3F344DFA342540AF39676979") {
+        throw "WiX Toolset SDK package hash mismatch: $WixPackageHash"
+    }
+    $RuntimeMSIs = @(
+        Get-ChildItem -Path $SwiftRuntimeOutput -Filter "*.msi" -File -Recurse
+    )
+    if ($RuntimeMSIs.Count -ne 1) {
+        throw "Expected one Swift runtime administrative MSI; found $($RuntimeMSIs.Count)."
+    }
+    New-Item -ItemType Directory -Path $SwiftRuntimeImage -Force | Out-Null
+    & msiexec.exe @(
+        "/a", $RuntimeMSIs[0].FullName, "/qn", "/norestart",
+        "TARGETDIR=$SwiftRuntimeImage"
+    )
+    if ($LASTEXITCODE -notin @(0, 3010)) {
+        throw "Swift runtime administrative extraction failed with exit code $LASTEXITCODE."
+    }
+    $SwiftCoreFiles = @(
+        Get-ChildItem -Path $SwiftRuntimeImage -Filter "swiftCore.dll" -File -Recurse
+    )
+    if ($SwiftCoreFiles.Count -ne 1) {
+        throw "Expected one swiftCore.dll in the Swift runtime administrative image; found $($SwiftCoreFiles.Count)."
+    }
+    $PayloadRoot = $SwiftCoreFiles[0].Directory.Parent.FullName
+    $PayloadItems = @(Get-ChildItem -Path $PayloadRoot -Force)
+    if (-not $PayloadItems) {
+        throw "The Swift runtime administrative image is empty."
+    }
+    $PayloadItems | Copy-Item -Destination $Destination -Recurse
+
+    $RuntimeFiles = @(
+        Get-ChildItem -Path $PayloadRoot -Filter "*.dll" -File -Recurse |
+            ForEach-Object {
+                [PSCustomObject]@{
+                    Name = $_.Name
+                    Source = $_.FullName
+                    Path = [IO.Path]::GetRelativePath(
+                        $PayloadRoot,
+                        $_.FullName
+                    ).Replace("\", "/")
+                    SHA256 = (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash
+                }
+            } | Sort-Object Path
+    )
+    if (-not $RuntimeFiles) {
+        throw "The Swift runtime administrative image contains no DLLs."
+    }
+    Assert-PEMachine `
+        -Files @($RuntimeFiles | ForEach-Object { $_.Source }) `
+        -TargetArchitecture $TargetArchitecture
+
+    return [PSCustomObject]@{
+        MergeModule = [PSCustomObject]@{
+            Name = $MergeModule.Name
+            SHA256 = (Get-FileHash -Algorithm SHA256 -Path $MergeModule.FullName).Hash
+        }
+        WixToolsetSDK = [PSCustomObject]@{
+            Version = $BuildConfiguration.wixToolsetSDKVersion
+            SHA256 = $WixPackageHash
+        }
+        Files = $RuntimeFiles
+    }
 }
 
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
@@ -359,20 +482,38 @@ try {
         throw "OpenWidgetWindowsBridge.dll was not staged."
     }
 
-    $RuntimeFiles = Get-ToolchainRuntimeFiles `
-        -Executable $SwiftExecutable.FullName `
-        -TargetInfo $TargetInfo `
+    $RuntimePayload = Expand-SwiftRuntimeRedistributable `
+        -TargetArchitecture $Architecture `
+        -BuildConfiguration $Configuration.build `
         -Destination $StagingDirectory
+    $RuntimeFiles = @($RuntimePayload.Files)
     $RequiredFoundationDLLs = @(
         "Foundation.dll",
         "FoundationEssentials.dll",
         "FoundationInternationalization.dll"
     )
+    $RequiredFoundationPaths = @()
     foreach ($RequiredFoundationDLL in $RequiredFoundationDLLs) {
-        if (-not ($RuntimeFiles | Where-Object { $_.Name -eq $RequiredFoundationDLL })) {
+        $Matches = @(
+            $RuntimeFiles | Where-Object { $_.Name -eq $RequiredFoundationDLL }
+        )
+        if ($Matches.Count -ne 1) {
             throw "The provider package is missing $RequiredFoundationDLL from the pinned toolchain."
         }
+        $RequiredFoundationPaths += $Matches[0].Path.Replace("/", "\")
     }
+    Assert-PEMachine `
+        -Files @(
+            $SwiftExecutable.FullName,
+            (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")
+        ) `
+        -TargetArchitecture $Architecture
+    Assert-RuntimeDependencyClosure `
+        -EntryPoints @(
+            $SwiftExecutable.FullName,
+            (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")
+        ) `
+        -RuntimeFiles $RuntimeFiles
 
     Invoke-Checked swift @(
         "run", "-c", "release", "openwidget-packager",
@@ -392,7 +533,7 @@ try {
         "Public\OpenWidgetProvider.json",
         $Configuration.provider.executable,
         $Configuration.provider.bridgeDLL
-    ) + $RequiredFoundationDLLs
+    ) + $RequiredFoundationPaths
     foreach ($RelativePath in $RequiredPackageFiles) {
         if (-not (Test-Path (Join-Path $InspectionDirectory $RelativePath) -PathType Leaf)) {
             throw "The expanded MSIX is missing '$RelativePath'."
@@ -427,7 +568,7 @@ try {
         } | Sort-Object Path
 
     $Evidence = [PSCustomObject]@{
-        SchemaVersion = 1
+        SchemaVersion = 2
         Architecture = $Architecture
         SwiftTriple = $SwiftTriple
         SwiftVersion = $SwiftVersion
@@ -436,6 +577,8 @@ try {
         WindowsAppSDKVersion = $Configuration.build.windowsAppSDKVersion
         WidgetsPackageVersion = $Configuration.build.widgetsPackageVersion
         CppWinRTVersion = $Configuration.build.cppWinRTVersion
+        WixToolsetSDK = $RuntimePayload.WixToolsetSDK
+        SwiftRuntimeMergeModule = $RuntimePayload.MergeModule
         WindowsAppRuntimeDependency = [PSCustomObject]@{
             Name = $Configuration.build.windowsAppRuntimePackageName
             Publisher = $Configuration.build.windowsAppRuntimePublisher
@@ -444,7 +587,15 @@ try {
         VisualCToolset = $Configuration.build.visualCToolset
         WindowsSDKVersion = $Configuration.build.windowsSDKVersion
         FoundationLinkMode = $Configuration.build.foundationLinkMode
-        RuntimeFiles = $RuntimeFiles
+        RuntimeFiles = @(
+            $RuntimeFiles | ForEach-Object {
+                [PSCustomObject]@{
+                    Name = $_.Name
+                    Path = $_.Path
+                    SHA256 = $_.SHA256
+                }
+            }
+        )
         PackageFiles = $PackageFiles
         BridgeSHA256 = (Get-FileHash -Algorithm SHA256 `
             -Path (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")).Hash

@@ -102,6 +102,7 @@ struct WindowsPackageManifestTests {
             windowsAppSDKVersion: "2.3.1",
             widgetsPackageVersion: "2.0.5",
             cppWinRTVersion: "2.0.230706.1",
+            wixToolsetSDKVersion: "7.0.0",
             windowsAppRuntimePackageName: "Microsoft.WindowsAppRuntime.2",
             windowsAppRuntimePublisher: "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
             windowsAppRuntimeMinVersion: "2.3.0.0",
@@ -117,13 +118,14 @@ struct WindowsPackageManifestTests {
 
     private func fixtureConfiguration() -> OpenWidgetProviderConfiguration {
         OpenWidgetProviderConfiguration(
-            schemaVersion: 4,
+            schemaVersion: 5,
             build: WindowsWidgetBuildConfiguration(
                 swiftSnapshot: "snapshot",
                 swiftToolchainIdentifier: "toolchain",
                 windowsAppSDKVersion: "2.3.1",
                 widgetsPackageVersion: "2.0.5",
                 cppWinRTVersion: "2.0.230706.1",
+                wixToolsetSDKVersion: "7.0.0",
                 windowsAppRuntimePackageName: "Microsoft.WindowsAppRuntime.2",
                 windowsAppRuntimePublisher: "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
                 windowsAppRuntimeMinVersion: "2.3.1.0",

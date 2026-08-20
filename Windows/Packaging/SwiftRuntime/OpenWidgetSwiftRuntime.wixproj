@@ -1,0 +1,9 @@
+<Project Sdk="WixToolset.Sdk/7.0.0">
+  <PropertyGroup>
+    <OutputName>OpenWidgetSwiftRuntime</OutputName>
+    <DefineConstants>
+      $(DefineConstants);
+      SwiftRuntimeMergeModule=$(SwiftRuntimeMergeModule);
+    </DefineConstants>
+  </PropertyGroup>
+</Project>
