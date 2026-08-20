@@ -195,6 +195,14 @@ As of 2026-08-20, the pinned Apple API fixtures typecheck for macOS 11, iOS 14,
 watchOS 9, and visionOS 26, and the replacement checks pass on the local arm64
 macOS host. All 12 focused Native behavior tests pass. The normal WASM API,
 behavior, and OpenCoreGraphics identity fixture targets also build with the
-pinned Swift 6.4 snapshot. The Windows script has not run on a Windows host. M1
-therefore remains incomplete until that execution output and exact installed
-Foundation artifact hashes are recorded.
+pinned Swift 6.4 snapshot.
+
+The pinned Windows gate passed on the `win25-vs2026` x86_64 runner in
+[GitHub Actions run 32320007986](https://github.com/1amageek/OpenWidgetKit/actions/runs/32320007986)
+at head `b8a2c3f150ccf6a764bda60e2e432f5bc763b333`. It compiled both replacement
+fixtures, executed the differential behavior fixture, observed the required
+non-`Sendable` rejection, and recorded the effective Foundation module and
+runtime DLL hashes. The normalized evidence and raw artifact digest are stored
+in `Verification/M1_WINDOWS_EVIDENCE.json`. These checks complete the M1 API
+inventory and compatibility-fixture milestone. They do not establish Windows
+Widgets Board behavior, which belongs to M6.

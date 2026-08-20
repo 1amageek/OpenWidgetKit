@@ -35,6 +35,8 @@ relevance, the basic `TimelineProviderContext`, and host-independent timeline
 validation. The Windows Provider, provider completion ownership, scheduler,
 SwiftUI View DSL, and Adaptive Cards conversion are not implemented. Each source
 target uses `FIXME(INCOMPLETE_IMPLEMENTATION)` to identify its incomplete surface.
+The M1 API inventory and compatibility-fixture milestone is complete across the
+pinned Apple SDKs, normal WASM, and pinned x86_64 Windows toolchain.
 
 Package structure or import availability must not be treated as evidence of
 implementation completion. See
@@ -58,6 +60,7 @@ flowchart LR
 | [DESIGN.md](DESIGN.md) | Responsibility boundaries, design decisions, alternatives, and position within the CoreFoundation workspace |
 | [WINDOWS_NOTES.md](WINDOWS_NOTES.md) | Windows-specific constraints for COM, MSIX, Adaptive Cards, callback lifetime, and related APIs |
 | [API_COMPATIBILITY.md](API_COMPATIBILITY.md) | Pinned M1 Apple API inventory, compatibility differences, fixtures, and Windows compile baseline |
+| [Verification/M1_WINDOWS_EVIDENCE.json](Verification/M1_WINDOWS_EVIDENCE.json) | Normalized pinned Windows toolchain, behavior, module, and runtime evidence for M1 |
 | [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | Ledger of unimplemented APIs, milestones, and verification evidence |
 
 ## Package boundary
