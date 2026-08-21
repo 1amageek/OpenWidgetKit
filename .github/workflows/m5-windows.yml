@@ -132,28 +132,34 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               throw "SwiftPM did not report the test binary directory."
           }
-          $TestBinaries = @(
-              Get-ChildItem -Path $BinaryPath -File -Recurse |
-                  Where-Object {
-                      $_.Name -in @(
-                          "OpenWidgetKitPackageTests.exe",
-                          "OpenWidgetKitPackageTests.xctest",
-                          "OpenWidgetKitPackageTests"
-                      )
-                  }
+          $TestTargets = @(
+              "OpenWidgetRuntimeTests",
+              "SwiftUITests",
+              "WidgetKitTests",
+              "OpenWidgetAdaptiveCardsTests",
+              "OpenWidgetWindowsRuntimeTests"
           )
-          if ($TestBinaries.Count -ne 1) {
-              throw "Expected exactly one OpenWidgetKit test runner; found $($TestBinaries.Count)."
-          }
-          $TestProcess = Start-Process `
-              -FilePath $TestBinaries[0].FullName `
-              -NoNewWindow -PassThru
-          if (-not $TestProcess.WaitForExit(600000)) {
-              Stop-Process -Id $TestProcess.Id -Force
-              throw "The Windows behavior tests exceeded the 10-minute timeout."
-          }
-          if ($TestProcess.ExitCode -ne 0) {
-              throw "The Windows behavior tests failed with exit code $($TestProcess.ExitCode)."
+          foreach ($TestTarget in $TestTargets) {
+              $TestBinaries = @(
+                  Get-ChildItem -Path $BinaryPath -File -Recurse |
+                      Where-Object {
+                          $_.BaseName -eq $TestTarget -or
+                          $_.Name -eq $TestTarget
+                      }
+              )
+              if ($TestBinaries.Count -ne 1) {
+                  throw "Expected exactly one $TestTarget runner; found $($TestBinaries.Count)."
+              }
+              $TestProcess = Start-Process `
+                  -FilePath $TestBinaries[0].FullName `
+                  -NoNewWindow -PassThru
+              if (-not $TestProcess.WaitForExit(120000)) {
+                  Stop-Process -Id $TestProcess.Id -Force
+                  throw "$TestTarget exceeded the two-minute timeout."
+              }
+              if ($TestProcess.ExitCode -ne 0) {
+                  throw "$TestTarget failed with exit code $($TestProcess.ExitCode)."
+              }
           }
 
       - name: Build the unsigned provider package
