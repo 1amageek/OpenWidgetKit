@@ -38,6 +38,20 @@ workflow on `main`, then extract it to a dedicated directory such as
 `C:\OpenWidgetKit-M6`. Do not mix files from different workflow runs or
 architectures; the startup script rejects hash and provenance mismatches.
 
+GitHub Actions artifacts and the development certificate are intentionally
+time-bounded. If the latest artifact is unavailable or its certificate has
+expired, regenerate both architectures from the current `main` branch:
+
+```powershell
+gh workflow run m5-windows.yml --ref main
+gh run list --workflow m5-windows.yml --branch main --limit 1
+```
+
+Open the reported run, wait for both architecture jobs to pass, and download
+the newly generated artifact. Do not reuse an expired certificate or re-sign an
+old MSIX outside the workflow; a fresh run reproduces the complete package,
+dependencies, signing identity, hashes, and provenance together.
+
 ## 2. Validate without changing the machine
 
 Open Windows PowerShell in the extracted directory and run:

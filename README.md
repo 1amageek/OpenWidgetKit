@@ -369,6 +369,8 @@ signature. On an elevated Windows 11 client it then installs missing runtime
 dependencies, trusts the development certificate, installs the provider, and
 performs a time-bounded packaged COM activation probe. See
 [M6_WINDOWS_RUNBOOK.md](M6_WINDOWS_RUNBOOK.md).
+The workflow supports manual dispatch so an expired artifact and its
+development certificate can be regenerated together from the current `main`.
 
 Artifact preparation does not count as signed installation or COM activation
 on a real client. Gallery discovery, pinning, lifecycle, visual behavior,
