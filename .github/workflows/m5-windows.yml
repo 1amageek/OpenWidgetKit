@@ -143,8 +143,7 @@ jobs:
               $TestBinaries = @(
                   Get-ChildItem -Path $BinaryPath -File -Recurse |
                       Where-Object {
-                          $_.BaseName -eq $TestTarget -or
-                          $_.Name -eq $TestTarget
+                          $_.Name -eq "$TestTarget.exe"
                       }
               )
               if ($TestBinaries.Count -ne 1) {
