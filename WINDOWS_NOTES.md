@@ -290,6 +290,9 @@ real hostが明示的に`LocalMachine\\TrustedPeople`へ導入します。produc
 SignToolによるCIのAuthenticode chain検証には一時的な`CurrentUser\\Root`を使用し、署名検証後に
 private certificateと一緒に必ず削除します。real hostのMSIX deployment trustは
 `Add-AppxPackage`が判定し、一般Authenticode chain statusを代用しません。
+署名処理中はself-signed leafをRootへ追加せず、署名完了後のpolicy検証にだけ一時Root trustを
+使います。SignToolの各processには120秒の上限を設け、chain discoveryや外部照会が停止しても
+CIと証明書cleanupが無期限に待機しないようにします。
 
 baseline更新時に次を固定して記録します。
 

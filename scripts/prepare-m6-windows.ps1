@@ -30,10 +30,36 @@ function Resolve-ArtifactPath {
 }
 
 function Invoke-Checked {
-    param([string]$FilePath, [string[]]$Arguments)
-    & $FilePath @Arguments | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FilePath failed with exit code $LASTEXITCODE."
+    param(
+        [string]$FilePath,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 120
+    )
+    $StartInfo = [Diagnostics.ProcessStartInfo]::new()
+    $StartInfo.FileName = $FilePath
+    $StartInfo.UseShellExecute = $false
+    foreach ($Argument in $Arguments) {
+        $StartInfo.ArgumentList.Add($Argument)
+    }
+
+    $Process = [Diagnostics.Process]::new()
+    $Process.StartInfo = $StartInfo
+    if (-not $Process.Start()) {
+        $Process.Dispose()
+        throw "Failed to start $FilePath."
+    }
+    try {
+        if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+            $Process.Kill($true)
+            $Process.WaitForExit()
+            throw "$FilePath exceeded the $TimeoutSeconds-second timeout."
+        }
+        if ($Process.ExitCode -ne 0) {
+            throw "$FilePath failed with exit code $($Process.ExitCode)."
+        }
+    }
+    finally {
+        $Process.Dispose()
     }
 }
 
@@ -218,11 +244,6 @@ try {
     if ($PublicCertificate.HasPrivateKey) {
         throw "The exported development certificate must not contain a private key."
     }
-    Import-Certificate `
-        -FilePath $CertificatePath `
-        -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
-    $RootCertificatePath = `
-        "Cert:\CurrentUser\Root\$($Certificate.Thumbprint)"
 
     Copy-Item -Path $UnsignedPackagePath -Destination $SignedPackagePath
     Invoke-Checked signtool @(
@@ -230,6 +251,16 @@ try {
         "/sha1", $Certificate.Thumbprint,
         $SignedPackagePath
     )
+
+    # Chain trust is added only after signing. Keeping the self-signed leaf out
+    # of Root while SignTool selects the private key avoids chain discovery on
+    # the signing path; Root is needed solely for the subsequent policy check.
+    Import-Certificate `
+        -FilePath $CertificatePath `
+        -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
+    $RootCertificatePath = `
+        "Cert:\CurrentUser\Root\$($Certificate.Thumbprint)"
+
     Invoke-Checked signtool @("verify", "/pa", "/all", $SignedPackagePath)
     $Signature = Get-AuthenticodeSignature -FilePath $SignedPackagePath
     if ($Signature.Status -ne [Management.Automation.SignatureStatus]::Valid `
