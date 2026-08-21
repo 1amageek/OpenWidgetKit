@@ -414,7 +414,8 @@ struct WidgetRuntimeServiceTests {
         let service = WidgetRuntimeService(
             registry: registry,
             host: host,
-            clock: clock
+            clock: clock,
+            diagnostics: { _ in }
         )
 
         try await service.createInstance(
@@ -447,7 +448,8 @@ struct WidgetRuntimeServiceTests {
         let service = WidgetRuntimeService(
             registry: registry,
             host: host,
-            clock: clock
+            clock: clock,
+            diagnostics: { _ in }
         )
 
         await #expect(throws: WidgetRuntimeError.unknownKind("unknown")) {
@@ -507,13 +509,12 @@ struct WidgetRuntimeServiceTests {
         let service = WidgetRuntimeService(
             registry: registry,
             host: RejectingHost(),
-            clock: ManualWidgetClock(now: now)
+            clock: ManualWidgetClock(now: now),
+            diagnostics: { _ in }
         )
 
         await #expect(
-            throws: WidgetRuntimeError.hostRejected(
-                message: "rejectedInvalidation"
-            )
+            throws: WidgetRuntimeError.hostOperationFailed
         ) {
             try await service.createInstance(
                 id: "instance",
@@ -541,7 +542,8 @@ struct WidgetRuntimeServiceTests {
                 registry: registry,
                 host: host,
                 clock: clock,
-                providerTimeout: .seconds(1)
+                providerTimeout: .seconds(1),
+                diagnostics: { _ in }
             ),
             host
         )

@@ -22,6 +22,12 @@ public class WidgetCenter {
         ) -> Void
     ) {
         guard let control = WidgetRuntimeComposition.currentControl() else {
+            WidgetRuntimeComposition.report(
+                .controlUnavailable(
+                    operation: .currentConfigurations,
+                    kind: nil
+                )
+            )
             completion(.failure(WidgetRuntimeError.hostUnavailable))
             return
         }
@@ -38,10 +44,28 @@ public class WidgetCenter {
     }
 
     public func reloadTimelines(ofKind kind: String) {
-        WidgetRuntimeComposition.currentControl()?.reloadTimelines(ofKind: kind)
+        guard let control = WidgetRuntimeComposition.currentControl() else {
+            WidgetRuntimeComposition.report(
+                .controlUnavailable(
+                    operation: .reloadTimelines,
+                    kind: kind
+                )
+            )
+            return
+        }
+        control.reloadTimelines(ofKind: kind)
     }
 
     public func reloadAllTimelines() {
-        WidgetRuntimeComposition.currentControl()?.reloadAllTimelines()
+        guard let control = WidgetRuntimeComposition.currentControl() else {
+            WidgetRuntimeComposition.report(
+                .controlUnavailable(
+                    operation: .reloadAllTimelines,
+                    kind: nil
+                )
+            )
+            return
+        }
+        control.reloadAllTimelines()
     }
 }

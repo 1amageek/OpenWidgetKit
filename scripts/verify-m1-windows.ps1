@@ -94,11 +94,53 @@ try {
         throw "The non-Sendable fixture failed unexpectedly: $NegativeOutput"
     }
 
+    $OpenCoreGraphicsRoot = Join-Path $RepositoryRoot "..\OpenCoreGraphics"
     & swift build `
-        --package-path Fixtures/WorkspaceAPI `
-        --target OpenWidgetKitWorkspaceAPIFixture | Out-Host
+        --package-path $OpenCoreGraphicsRoot `
+        --target OpenCoreGraphics | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "The OpenCoreGraphics identity fixture failed to build."
+        throw "OpenCoreGraphics failed to build for the geometry identity fixture."
+    }
+
+    $OpenCoreGraphicsModuleSearchDirectories = Get-ChildItem `
+        -Path (Join-Path $OpenCoreGraphicsRoot ".build") `
+        -Recurse |
+        Where-Object { $_.Name -like '*.swiftmodule' } |
+        ForEach-Object {
+            if ($_.PSIsContainer) {
+                $_.Parent.FullName
+            }
+            else {
+                $_.Directory.FullName
+            }
+        } |
+        Sort-Object -Unique
+    if (-not $OpenCoreGraphicsModuleSearchDirectories) {
+        throw "No OpenCoreGraphics Swift module search paths were found."
+    }
+
+    $IdentityArguments = @(
+        "-parse-as-library"
+        "-swift-version"
+        "6"
+        "-typecheck"
+    )
+    $IdentityModuleSearchDirectories = @(
+        $ModuleSearchDirectories
+        $OpenCoreGraphicsModuleSearchDirectories
+    ) | Sort-Object -Unique
+    foreach ($ModuleSearchDirectory in $IdentityModuleSearchDirectories) {
+        $IdentityArguments += @("-I", $ModuleSearchDirectory)
+    }
+    $IdentityArguments += @(
+        "-Xcc",
+        "-fmodule-map-file=$($BridgeModuleMaps[0].FullName)"
+    )
+    $IdentityArguments += "Fixtures/WorkspaceAPI/FoundationGeometryIdentity.swift"
+
+    & swiftc @IdentityArguments | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "The OpenCoreGraphics geometry identity fixture failed to typecheck."
     }
 
     $ExpectedBehaviorOutput = @(

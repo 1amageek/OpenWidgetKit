@@ -17,6 +17,7 @@ package struct WidgetNode: Equatable, Sendable {
         case group
         case spacer(minLength: CGFloat?)
         case divider
+        case action(WidgetActionDescriptor)
         case modified(WidgetModifier)
         case background(
             alignment: WidgetAlignment,

@@ -16,6 +16,8 @@ package struct BundleWidgetTextResolver: WidgetTextResolving {
         switch text.storage {
         case .verbatim(let value):
             return value
+        case .localizedResource(let resource):
+            return String(localized: resource)
         case .localized(
             let key,
             let tableName,

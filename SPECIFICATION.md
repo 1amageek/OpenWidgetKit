@@ -134,6 +134,9 @@ package版を同一processへ混在させず、compilerとruntime libraryを同�
 | `TimelineProvider` | WidgetKit | associated `Entry`、placeholder、snapshot、timeline、`@Sendable` completion |
 | `Timeline<Entry>` | WidgetKit | immutable entriesとreload policy |
 | `WidgetCenter` | WidgetKit | shared instance、kind/all reload |
+| `PersistentlyIdentifiable` | AppIntents | `persistentIdentifier`とdefault type identity |
+| `AppIntent` | AppIntents | `PersistentlyIdentifiable`/`Sendable`、`PerformResult: IntentResult`、`title`、`init`、`perform()`、`openAppWhenRun` |
+| `Button(intent:)` | SwiftUI/AppIntents overlay | iOS 17/macOS 14/watchOS 10/tvOS 17、generic intent initializer、role/text overload |
 
 正確なspelling、availability、opaque return、generic constraintは固定SDKのinterface fixtureから
 生成・確認し、本文の要約から推測しません。
@@ -340,13 +343,30 @@ snapshot/timelineを再評価します。`OnActionInvoked`は登録済みaction�
 ```text
 SwiftUI interactive view
     -> stable action identity
-    -> Adaptive Cards Action.Execute verb
+    -> environment-qualified Adaptive Cards Action.Execute verb
     -> IWidgetProvider.OnActionInvoked
     -> copied owned action value
     -> WidgetProviderService actor
-    -> registered action handler
-    -> optional timeline invalidation
+    -> accepted entry-revision action table
+    -> registered AppIntent.perform()
+    -> timeline invalidation after success
 ```
+
+M7の最初のsurfaceは`AppIntent`付き`Button`と`Text` labelに限定します。logical action IDは
+semantic node identityから導き、verbはenvironment variantを加えて、light/darkで異なるintent
+parameter valueを誤配送しません。hostが`UpdateWidget`を受理するたびにaction revisionを進め、
+provider session、widget instance、generation、revision、structure identityをopaque `CustomState`へ
+含めます。bridgeへ提示したrevisionは結果が失敗でも再利用せず、accepted action tableは成功後だけ
+commitします。unknown verb、payload不一致、同logical actionの重複実行、旧session/instance/revision、
+実行中のgeneration変更はtyped failureです。
+
+`LocalizedStringResource`はsemantic documentに値として保持し、Adaptive Cards dataを生成する
+text resolverで初めて最終文字列へ解決します。
+
+provider eventの順序境界ではactionのvalidationとlogical action予約までを完了させます。intent本体は
+独立したexecutionとして監視し、後続のdelete、context change、shutdown callbackを待たせません。
+execution完了後はaccepted stateを再検査し、staleならtimeline invalidationを行いません。
+executionはprovider lifetime ownerを強参照せず、owner解放後のcompletionもreloadを行いません。
 
 最初のinteractive milestoneで対応しないSwiftUI APIはcompile可能なno-opとして置かず、
 未宣言または明示的unsupported contractとして管理します。
@@ -363,6 +383,8 @@ SwiftUI interactive view
 | document/payload | request owner | update completion | immutable value | compilation error |
 | WinRT callback object | Windows host | callback only | C++ scope | never retained |
 | JSON ABI buffer | Swift payload owner | C++ conversion | explicit owner | exactly-once free |
+| runtime diagnostic hub | process composition | bootstrap lifetime | `Mutex<State>`; one ordered drainer invokes sink callbacks outside lock | bounded buffering and typed overflow |
+| provider callback ring | Windows bootstrap | provider run | fixed-capacity `Mutex<State>` ring | overflow closes ingress and schedules terminal shutdown |
 
 外部callback、host update、resource I/Oはlock/critical section外で行います。
 
@@ -383,6 +405,15 @@ WidgetShutdownError
 
 公開Apple APIがnonthrowingの場合、公開signatureを変更せずruntime diagnosticとhost error
 reportingへ接続します。ただし内部で成功値へ丸めてはいけません。
+
+```mermaid
+flowchart LR
+    Callback["Owned Windows callback value"] --> Ring["Bounded FIFO ring"]
+    Ring --> Controller["Provider controller actor"]
+    Ring -->|capacity exceeded| Close["Close normal ingress"]
+    Close --> Diagnostic["Typed overflow diagnostic"]
+    Close --> Shutdown["Terminal shutdown event + native request"]
+```
 
 ## 13. Packaging contract
 

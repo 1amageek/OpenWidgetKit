@@ -1,6 +1,18 @@
 param(
     [ValidateSet("x64", "arm64")]
     [string]$Architecture = "x64",
+    [Parameter(Mandatory = $true)]
+    [string]$ConfigurationPath,
+    [Parameter(Mandatory = $true)]
+    [string]$ProviderPackageDirectory,
+    [Parameter(Mandatory = $true)]
+    [string]$ProviderProduct,
+    [string]$AssetRoot = "",
+    [switch]$GenerateFixtureAssets,
+    [string]$SigningCertificatePath = "",
+    [string]$SigningPasswordEnvironmentVariable = "",
+    [string]$TimestampURL = "",
+    [switch]$AllowUnsigned,
     [string]$OutputDirectory = ""
 )
 
@@ -8,8 +20,66 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
-$ConfigurationTemplate = Join-Path $RepositoryRoot "Windows\Packaging\OpenWidgetProvider.json"
 $BridgeProject = Join-Path $RepositoryRoot "Windows\Bridge\OpenWidgetWindowsBridge.vcxproj"
+$ConfigurationPath = if ([IO.Path]::IsPathRooted($ConfigurationPath)) {
+    [IO.Path]::GetFullPath($ConfigurationPath)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $ConfigurationPath))
+}
+$ProviderPackageDirectory = if ([IO.Path]::IsPathRooted($ProviderPackageDirectory)) {
+    [IO.Path]::GetFullPath($ProviderPackageDirectory)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $ProviderPackageDirectory))
+}
+if (-not [string]::IsNullOrWhiteSpace($AssetRoot)) {
+    $AssetRoot = if ([IO.Path]::IsPathRooted($AssetRoot)) {
+        [IO.Path]::GetFullPath($AssetRoot)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $AssetRoot))
+    }
+}
+if (-not (Test-Path $ConfigurationPath -PathType Leaf)) {
+    throw "ConfigurationPath must identify an existing provider configuration."
+}
+if (-not (Test-Path $ProviderPackageDirectory -PathType Container)) {
+    throw "ProviderPackageDirectory must identify an existing Swift package."
+}
+if (-not $ProviderProduct) {
+    throw "ProviderProduct must be nonempty."
+}
+$HasAssetRoot = -not [string]::IsNullOrWhiteSpace($AssetRoot)
+if ([bool]$GenerateFixtureAssets -eq $HasAssetRoot) {
+    throw "Select exactly one asset source: AssetRoot or GenerateFixtureAssets."
+}
+if ($SigningCertificatePath) {
+    $SigningCertificatePath = if ([IO.Path]::IsPathRooted($SigningCertificatePath)) {
+        [IO.Path]::GetFullPath($SigningCertificatePath)
+    } else {
+        [IO.Path]::GetFullPath(
+            (Join-Path $RepositoryRoot $SigningCertificatePath)
+        )
+    }
+    if ($AllowUnsigned) {
+        throw "AllowUnsigned cannot be combined with signing inputs."
+    }
+    if (-not (Test-Path $SigningCertificatePath -PathType Leaf)) {
+        throw "SigningCertificatePath must identify an existing PFX file."
+    }
+    if (-not $SigningPasswordEnvironmentVariable -or -not $TimestampURL) {
+        throw "Signed packages require a password environment variable and TimestampURL."
+    }
+    if ($SigningPasswordEnvironmentVariable -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+        throw "SigningPasswordEnvironmentVariable is not a valid environment variable name."
+    }
+    $TimestampURI = [Uri]$TimestampURL
+    if (-not $TimestampURI.IsAbsoluteUri -or $TimestampURI.Scheme -ne "https") {
+        throw "TimestampURL must be an absolute HTTPS URL."
+    }
+} elseif (-not $AllowUnsigned) {
+    throw "Provide signing inputs or explicitly select AllowUnsigned for a non-distributable fixture."
+} elseif ($SigningPasswordEnvironmentVariable -or $TimestampURL) {
+    throw "SigningPasswordEnvironmentVariable and TimestampURL require SigningCertificatePath."
+}
 $SwiftTriple = if ($Architecture -eq "x64") {
     "x86_64-unknown-windows-msvc"
 } else {
@@ -42,8 +112,7 @@ $WixPackageContent = Join-Path $WixToolDirectory "package"
 $SwiftRuntimeImage = Join-Path $OutputDirectory "swift-runtime-image"
 $SwiftRuntimeIntermediate = Join-Path $OutputDirectory "swift-runtime-obj"
 $InspectionDirectory = Join-Path $OutputDirectory "inspection"
-$EvidencePath = Join-Path $OutputDirectory "m5-build-evidence.json"
-$MSIXPath = Join-Path $OutputDirectory "OpenWidgetKit-$Architecture.msix"
+$EvidencePath = Join-Path $OutputDirectory "windows-provider-build-evidence.json"
 
 function Invoke-Checked {
     param([string]$FilePath, [string[]]$Arguments)
@@ -167,6 +236,50 @@ function Write-FixtureAssets {
             -Path (Join-Path $AssetDirectory $Asset.Name) `
             -Width $Asset.Width `
             -Height $Asset.Height
+    }
+}
+
+function Copy-ConfiguredAssets {
+    param(
+        [object]$Configuration,
+        [string]$SourceRoot,
+        [string]$DestinationRoot
+    )
+    $SourceRootPath = [IO.Path]::GetFullPath($SourceRoot)
+    $SourceRootPrefix = $SourceRootPath.TrimEnd(
+        [IO.Path]::DirectorySeparatorChar,
+        [IO.Path]::AltDirectorySeparatorChar
+    ) + [IO.Path]::DirectorySeparatorChar
+    $AssetPaths = @(
+        $Configuration.provider.square44Logo
+        $Configuration.provider.square150Logo
+        $Configuration.provider.storeLogo
+        $Configuration.definitions | ForEach-Object {
+            $_.icon
+            $_.screenshot
+        }
+        $Configuration.resources | ForEach-Object { $_.path }
+    ) | Sort-Object -Unique
+    foreach ($RelativePath in $AssetPaths) {
+        $PlatformPath = $RelativePath.Replace(
+            [char]'/',
+            [IO.Path]::DirectorySeparatorChar
+        )
+        $SourcePath = [IO.Path]::GetFullPath((Join-Path $SourceRootPath $PlatformPath))
+        if (-not $SourcePath.StartsWith(
+            $SourceRootPrefix,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw "Configured asset '$RelativePath' escapes AssetRoot."
+        }
+        if (-not (Test-Path $SourcePath -PathType Leaf)) {
+            throw "Configured asset '$RelativePath' was not found under AssetRoot."
+        }
+        $DestinationPath = Join-Path $DestinationRoot $PlatformPath
+        $DestinationDirectory = Split-Path -Parent $DestinationPath
+        New-Item -ItemType Directory -Path $DestinationDirectory -Force |
+            Out-Null
+        Copy-Item -Path $SourcePath -Destination $DestinationPath
     }
 }
 
@@ -362,7 +475,7 @@ if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
 
 Push-Location $RepositoryRoot
 try {
-    $Configuration = Get-Content -Raw $ConfigurationTemplate | ConvertFrom-Json
+    $Configuration = Get-Content -Raw $ConfigurationPath | ConvertFrom-Json
     $Configuration.provider.architecture = $Architecture
     if ($Configuration.build.foundationLinkMode -ne "dynamic") {
         throw "The M5 packaging gate currently requires dynamic Foundation linkage."
@@ -397,10 +510,19 @@ try {
     }
     Invoke-Checked swift @(
         "run", "-c", "release", "openwidget-packager",
-        "validate-metadata", $ConfigurationTemplate
+        "validate-metadata", $ConfigurationPath
     )
+    $MSIXPath = Join-Path $OutputDirectory `
+        "$($Configuration.provider.packageName)-$Architecture.msix"
     New-Item -ItemType Directory -Path $StagingDirectory -Force | Out-Null
-    Write-FixtureAssets -Root $StagingDirectory
+    if ($GenerateFixtureAssets) {
+        Write-FixtureAssets -Root $StagingDirectory
+    } else {
+        Copy-ConfiguredAssets `
+            -Configuration $Configuration `
+            -SourceRoot $AssetRoot `
+            -DestinationRoot $StagingDirectory
+    }
 
     $StagedConfiguration = Join-Path $StagingDirectory "OpenWidgetProvider.json"
     $Configuration | ConvertTo-Json -Depth 12 |
@@ -410,19 +532,34 @@ try {
     Copy-Item -Path $StagedConfiguration -Destination $PublicDirectory
 
     Invoke-Checked swift @(
-        "build", "--scratch-path", $SwiftScratchDirectory,
+        "build", "--package-path", $ProviderPackageDirectory,
+        "--scratch-path", $SwiftScratchDirectory,
         "-c", "release", "--triple", $SwiftTriple,
-        "--product", "OpenWidgetWindowsProviderFixture"
+        "--product", $ProviderProduct
+    )
+    $ProviderExecutableName = [IO.Path]::GetFileName(
+        $Configuration.provider.executable
     )
     $SwiftExecutables = @(
         Get-ChildItem -Path $SwiftScratchDirectory `
-            -Filter "OpenWidgetWindowsProviderFixture.exe" -File -Recurse
+            -Filter $ProviderExecutableName -File -Recurse
     )
     if ($SwiftExecutables.Count -ne 1) {
-        throw "Expected one $SwiftTriple provider executable in its isolated SwiftPM build root; found $($SwiftExecutables.Count)."
+        throw "Expected one '$ProviderExecutableName' for $SwiftTriple in the isolated SwiftPM build root; found $($SwiftExecutables.Count)."
     }
     $SwiftExecutable = $SwiftExecutables[0].FullName
-    Copy-Item $SwiftExecutable $StagingDirectory
+    $StagedProviderExecutable = Join-Path $StagingDirectory `
+        $Configuration.provider.executable.Replace(
+            [char]'/',
+            [IO.Path]::DirectorySeparatorChar
+        )
+    New-Item -ItemType Directory `
+        -Path (Split-Path -Parent $StagedProviderExecutable) -Force |
+        Out-Null
+    Copy-Item $SwiftExecutable $StagedProviderExecutable
+    Get-ChildItem -Path $SwiftExecutables[0].DirectoryName `
+        -Filter "*.resources" -Directory |
+        Copy-Item -Destination $StagingDirectory -Recurse
 
     Invoke-Checked msbuild @(
         $BridgeProject,
@@ -491,12 +628,20 @@ try {
     if (-not (Test-Path $BridgeOutput -PathType Container)) {
         throw "The C++/WinRT bridge output directory was not found."
     }
-    Get-ChildItem -Path $BridgeOutput -File |
-        Where-Object { $_.Extension -in @(".dll", ".pri") } |
-        Copy-Item -Destination $StagingDirectory
-    if (-not (Test-Path (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll"))) {
+    $BuiltBridge = Join-Path $BridgeOutput "OpenWidgetWindowsBridge.dll"
+    if (-not (Test-Path $BuiltBridge -PathType Leaf)) {
         throw "OpenWidgetWindowsBridge.dll was not staged."
     }
+    $StagedBridge = Join-Path $StagingDirectory `
+        $Configuration.provider.bridgeDLL.Replace(
+            [char]'/',
+            [IO.Path]::DirectorySeparatorChar
+        )
+    New-Item -ItemType Directory -Path (Split-Path -Parent $StagedBridge) -Force |
+        Out-Null
+    Copy-Item -Path $BuiltBridge -Destination $StagedBridge
+    Get-ChildItem -Path $BridgeOutput -Filter "*.pri" -File |
+        Copy-Item -Destination $StagingDirectory
 
     $RuntimePayload = Expand-SwiftRuntimeRedistributable `
         -TargetArchitecture $Architecture `
@@ -521,13 +666,13 @@ try {
     Assert-PEMachine `
         -Files @(
             $SwiftExecutable,
-            (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")
+            $StagedBridge
         ) `
         -TargetArchitecture $Architecture
     Assert-RuntimeDependencyClosure `
         -EntryPoints @(
             $SwiftExecutable,
-            (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")
+            $StagedBridge
         ) `
         -RuntimeFiles $RuntimeFiles
 
@@ -540,6 +685,28 @@ try {
     Invoke-Checked makeappx @(
         "pack", "/d", $StagingDirectory, "/p", $MSIXPath, "/o"
     )
+    if ($SigningCertificatePath) {
+        $SigningPassword = [Environment]::GetEnvironmentVariable(
+            $SigningPasswordEnvironmentVariable
+        )
+        if (-not $SigningPassword) {
+            throw "The configured signing password environment variable is empty."
+        }
+        try {
+            Invoke-Checked signtool @(
+                "sign", "/fd", "SHA256",
+                "/f", $SigningCertificatePath,
+                "/p", $SigningPassword,
+                "/tr", $TimestampURL,
+                "/td", "SHA256",
+                $MSIXPath
+            )
+        }
+        finally {
+            $SigningPassword = $null
+        }
+        Invoke-Checked signtool @("verify", "/pa", "/all", $MSIXPath)
+    }
     Invoke-Checked makeappx @(
         "unpack", "/p", $MSIXPath, "/d", $InspectionDirectory, "/o"
     )
@@ -584,9 +751,11 @@ try {
         } | Sort-Object Path
 
     $Evidence = [PSCustomObject]@{
-        SchemaVersion = 3
+        SchemaVersion = 4
         Architecture = $Architecture
         SwiftTriple = $SwiftTriple
+        ProviderProduct = $ProviderProduct
+        Signed = [bool]$SigningCertificatePath
         SwiftVersion = $SwiftVersion
         SwiftSnapshot = $Configuration.build.swiftSnapshot
         SwiftToolchainIdentifier = $Configuration.build.swiftToolchainIdentifier
@@ -620,9 +789,9 @@ try {
         )
         PackageFiles = $PackageFiles
         BridgeSHA256 = (Get-FileHash -Algorithm SHA256 `
-            -Path (Join-Path $StagingDirectory "OpenWidgetWindowsBridge.dll")).Hash
+            -Path $StagedBridge).Hash
         ProviderSHA256 = (Get-FileHash -Algorithm SHA256 `
-            -Path (Join-Path $StagingDirectory $Configuration.provider.executable)).Hash
+            -Path $StagedProviderExecutable).Hash
         MSIXSHA256 = (Get-FileHash -Algorithm SHA256 -Path $MSIXPath).Hash
     }
     $Evidence | ConvertTo-Json -Depth 8 |

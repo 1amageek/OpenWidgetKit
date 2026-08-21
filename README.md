@@ -52,6 +52,38 @@ architecture-matched Swift runtime closure and expanded unsigned MSIX. It does
 not activate COM or execute the provider in Widgets Board. Signed installation
 and real Widgets Board acceptance remain M6.
 
+The current P0/P1 hardening changes make the Windows workflow run on pushes and
+pull requests, execute the compiled Windows test runner with a timeout, and
+exercise the standalone remote OpenFoundation dependency graph. These workflow
+changes have not yet run. Runtime diagnostics now use bounded, typed correlation
+records rather than arbitrary `Error` strings. Windows callback ingress uses a
+fixed-capacity ring buffer; overflow closes ingress, preserves a terminal
+shutdown event, and requests native shutdown. The complete 97-test Native suite,
+including the overflow and typed-diagnostic behavior, passes. Windows execution
+of the revised workflow remains pending.
+
+M7 interaction is now implemented in source through the Apple-compatible
+`AppIntent`-backed `Button` entry point. The semantic document retains stable
+action identities and concrete intent handlers, the Adaptive Cards compiler
+emits variant-specific `Action.Execute` bindings, and the Windows host accepts
+only the action table committed by `UpdateWidget`. Opaque action state is scoped
+to the provider session, widget instance, generation, and entry revision;
+externally attempted revisions are never reused after an ambiguous bridge
+failure. Light and dark verbs for one logical action share one in-flight fence.
+`LocalizedStringResource` metadata remains in the semantic document until the
+selected text renderer resolves it. Action validation and reservation remain
+ordered with provider events, while intent completion is monitored separately
+so a suspended intent cannot block deletion, context changes, or shutdown, or
+retain the provider-lifetime bridge after its owner is released. The owned
+`OnActionInvoked` callback path executes the intent and requests a new timeline
+generation. Focused success, unknown, malformed, duplicate, stale-entry, and
+reentrant/session/instance/lifecycle/owner-release tests pass on Native. The
+pinned Apple/replacement API fixture passes, and the M7 API plus Adaptive Cards
+targets build for normal WASM against the accompanying OpenFoundation localized-
+value supplement. The release manifest now pins the published supplement, so
+the clean standalone WASM dependency graph exercises the same implementation.
+Windows M7 compilation and real Widgets Board interaction remain unverified.
+
 The latest lifecycle review corrected or clarified inactive-state suppression,
 retained-content-aware recovery, monotonic
 delete/recreate generations, complete-template reset for a new instance
@@ -66,7 +98,7 @@ template compilation. Each cache entry retains the binding plan emitted by that
 same compilation, so cache hits reevaluate dynamic data and resource ownership
 without rebuilding the template tree or JSON and without independently
 reconstructing binding order. The accompanying regression tests pass as part of
-the 75-test Native suite.
+the 97-test Native suite.
 
 Package structure or import availability must not be treated as evidence of
 implementation completion. See
@@ -80,6 +112,9 @@ flowchart LR
     Scheduler --> Compiler["Adaptive Cards compiler<br/>M4 Native/WASM verified"]
     Compiler --> Windows["Windows host and packaging<br/>M5 x64/ARM64 build and MSIX gate pass"]
     Windows --> Board["Widgets Board E2E<br/>M6 pending"]
+    Windows --> Interaction["AppIntent interaction path<br/>Native/API/WASM verified; Windows pending"]
+    Board --> Acceptance["Static and interaction acceptance<br/>real host pending"]
+    Interaction --> Acceptance
 ```
 
 ## Documents
@@ -100,6 +135,7 @@ flowchart LR
 ```mermaid
 flowchart TD
     App["Unmodified widget source"]
+    AppIntents["AppIntents product<br/>bounded widget intent contract"]
     SwiftUI["SwiftUI product<br/>View DSL and Widget protocols"]
     WidgetKit["WidgetKit product<br/>Configuration and Timeline"]
     Foundation["OpenFoundation<br/>shared Foundation boundary"]
@@ -107,9 +143,11 @@ flowchart TD
     Compiler["OpenWidgetAdaptiveCards<br/>package-internal"]
     Host["OpenWidgetWindowsRuntime<br/>package-internal"]
 
+    App --> AppIntents
     App --> SwiftUI
     App --> WidgetKit
     WidgetKit --> SwiftUI
+    SwiftUI --> AppIntents
     SwiftUI --> Foundation
     WidgetKit --> Foundation
     SwiftUI --> Runtime
@@ -120,9 +158,21 @@ flowchart TD
     Host --> Compiler
 ```
 
-The two public products are `SwiftUI` and `WidgetKit`. The package name and
+The three public products are `AppIntents`, `SwiftUI`, and `WidgetKit`. The package name and
 public module names intentionally differ. `OpenWidgetRuntime` shares internal
-contracts between the two modules and is not exposed as a public product.
+contracts between the public modules and is not exposed as a public product.
+
+The release manifest resolves `OpenFoundation` from its pinned repository
+revision, so cloning OpenWidgetKit does not require a sibling workspace layout.
+Workspace contributors can opt into the local checkout without changing the
+manifest:
+
+```bash
+swift package edit OpenFoundation --path ../OpenFoundation
+```
+
+Use `swift package unedit OpenFoundation` before validating the published
+dependency graph.
 
 ## Intended integration
 
@@ -133,6 +183,11 @@ Web are selected as platforms, not as Package Traits.
 .target(
     name: "WeatherWidget",
     dependencies: [
+        .product(
+            name: "AppIntents",
+            package: "OpenWidgetKit",
+            condition: .when(platforms: [.windows])
+        ),
         .product(
             name: "SwiftUI",
             package: "OpenWidgetKit",
@@ -201,10 +256,14 @@ The first milestone does not include:
 - frame animation through OpenCoreAnimation;
 - a Web Widget backend that requires remote HTML.
 
-Interactive views, `Action.Execute` compilation, and action routing are the M7
-production milestone. Until that surface exists, an unexpected host action is
-reported as an explicit typed unsupported failure and is never treated as a
-successful no-op.
+The bounded M7 source surface supports `Button(intent:label:)` and its text and
+role overloads. The label must currently lower to `Text`; arbitrary labels,
+`Toggle`, App Intent parameter property wrappers, foreground/open-app execution,
+the cancel role, styled action titles, and other App Intents capabilities remain
+undeclared or fail with a typed semantic/compiler error. Source implementation
+does not establish production acceptance:
+signed installation, real `Action.Execute` delivery, and Widgets Board
+reentrancy behavior still require M6/M7 host verification.
 
 ## Authoritative references
 
@@ -216,12 +275,15 @@ installed macOS 27.0 SDK:
 - [WidgetKit StaticConfiguration](https://developer.apple.com/documentation/widgetkit/staticconfiguration)
 - [WidgetKit TimelineProvider](https://developer.apple.com/documentation/widgetkit/timelineprovider)
 - [Creating a widget extension](https://developer.apple.com/documentation/widgetkit/creating-a-widget-extension)
+- [Adding interactivity to widgets and Live Activities](https://developer.apple.com/documentation/widgetkit/adding-interactivity-to-widgets-and-live-activities)
 
 The Windows side follows Microsoft's current Widget Provider contracts:
 
 - [Widget providers](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/widget-providers)
 - [Implement a widget provider in a Win32 app](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/implement-widget-provider-win32)
 - [Create a widget template](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/widgets-create-a-template)
+- [Action.Execute](https://learn.microsoft.com/en-us/adaptive-cards/schema-explorer/action-execute)
+- [IWidgetProvider.OnActionInvoked](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.windows.widgets.providers.iwidgetprovider.onactioninvoked)
 - [Widget provider manifest](https://learn.microsoft.com/en-us/windows/apps/develop/widgets/widget-provider-manifest)
 
 The distribution and module boundaries of Swift Foundation follow these
@@ -254,14 +316,36 @@ MSIX.
 
 ## Windows provider build gate
 
-`scripts/build-m5-windows.ps1` builds an unsigned x64 or ARM64 provider package.
-It validates the toolchain, NuGet graph, package configuration, official Swift
-redistributable and WiX provenance, generated manifest, and expanded MSIX
-contents. The workflow runs this script on
+`scripts/build-m5-windows.ps1` is the historical entry point for the generic
+x64/ARM64 provider packager. It requires the consumer's provider configuration,
+Swift package directory, executable product, and either an asset root or the
+explicit fixture-asset switch. It validates the toolchain, NuGet graph, package
+configuration, official Swift redistributable and WiX provenance, generated
+manifest, and expanded MSIX contents. SwiftPM resource bundles adjacent to the
+selected executable are staged with it.
+
+A distributable invocation must supply a PFX, a password environment-variable
+name, and a timestamp URL. The script signs and verifies the resulting MSIX.
+Unsigned output requires the explicit `-AllowUnsigned` switch and is treated as
+a non-distributable fixture. For example:
+
+```powershell
+./scripts/build-m5-windows.ps1 `
+    -Architecture x64 `
+    -ConfigurationPath Provider/OpenWidgetProvider.json `
+    -ProviderPackageDirectory . `
+    -ProviderProduct WeatherWidgetProvider `
+    -AssetRoot Provider `
+    -SigningCertificatePath $env:WIDGET_SIGNING_PFX `
+    -SigningPasswordEnvironmentVariable WIDGET_SIGNING_PASSWORD `
+    -TimestampURL $env:WIDGET_TIMESTAMP_URL
+```
+
+The repository workflow runs this script on
 `windows-2025-vs2026` with the x64 Swift installer and on
 `windows-11-vs2026-arm` with the ARM64 Swift installer. The build script
 requires the active Swift host triple and Visual Studio host architecture to
 match the package architecture, so this gate never substitutes cross-compiled
-output. Signing, installation, gallery discovery, pinning, COM activation, and
-visual behavior belong to M6 and are intentionally not reported by this build
-gate.
+output. The repository fixture deliberately selects unsigned output. Signed
+installation, gallery discovery, pinning, COM activation, and visual behavior
+still require the M6 real-host gate and are not reported by package assembly.

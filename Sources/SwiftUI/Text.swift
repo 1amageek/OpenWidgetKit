@@ -4,6 +4,7 @@ import OpenWidgetRuntime
 public struct Text: Equatable, Sendable {
     private enum Storage: Equatable, Sendable {
         case verbatim(String)
+        case localizedResource(LocalizedStringResource)
         case localized(
             key: String,
             tableName: String?,
@@ -45,6 +46,14 @@ public struct Text: Equatable, Sendable {
         selectedForegroundColor = nil
     }
 
+    @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
+    @_disfavoredOverload
+    public init(_ resource: LocalizedStringResource) {
+        storage = .localizedResource(resource)
+        selectedFont = nil
+        selectedForegroundColor = nil
+    }
+
     nonisolated public func font(_ font: Font?) -> Text {
         var copy = self
         copy.selectedFont = font
@@ -62,6 +71,8 @@ public struct Text: Equatable, Sendable {
         switch storage {
         case .verbatim(let value):
             runtimeStorage = .verbatim(value)
+        case .localizedResource(let resource):
+            runtimeStorage = .localizedResource(resource)
         case .localized(
             let key,
             let tableName,

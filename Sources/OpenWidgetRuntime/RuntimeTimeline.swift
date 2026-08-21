@@ -1,4 +1,4 @@
-package struct RuntimeTimeline: Equatable, Sendable {
+package struct RuntimeTimeline: Sendable {
     package let entries: [RuntimeTimelineEntry]
     package let reloadPolicy: RuntimeTimelineReloadPolicy
 

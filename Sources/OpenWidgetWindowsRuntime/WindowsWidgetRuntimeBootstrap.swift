@@ -5,12 +5,18 @@ import OpenWidgetRuntime
 @MainActor
 package final class WindowsWidgetRuntimeBootstrap: WidgetRuntimeBootstrap, Sendable {
     private let configurationURL: URL
-    private let diagnostics: @Sendable (WindowsWidgetBridgeDiagnostic) -> Void
+    private let diagnostics: @Sendable (WindowsWidgetDiagnostic) -> Void
+
+    package var diagnosticSink: WidgetRuntimeDiagnosticSink {
+        { [diagnostics] diagnostic in
+            diagnostics(.runtime(diagnostic))
+        }
+    }
 
     package init(
         configurationURL: URL,
-        diagnostics: @escaping @Sendable (WindowsWidgetBridgeDiagnostic) -> Void = {
-            print("[OpenWidgetKit] bridge diagnostic \($0.code): \($0.message)")
+        diagnostics: @escaping @Sendable (WindowsWidgetDiagnostic) -> Void = {
+            print("[OpenWidgetKit] \($0.renderedMessage)")
         }
     ) {
         self.configurationURL = configurationURL
@@ -37,7 +43,7 @@ package final class WindowsWidgetRuntimeBootstrap: WidgetRuntimeBootstrap, Senda
         )
         try configuration.validate(registry: registry, packageRoot: packageRoot)
 
-        let router = WindowsWidgetEventRouter(diagnostics: diagnostics)
+        let router = try WindowsWidgetEventRouter(diagnostics: diagnostics)
         let bridge = try DynamicWindowsWidgetBridge(
             libraryPath: packageRoot
                 .appendingPathComponent(configuration.provider.bridgeDLL)
@@ -56,25 +62,29 @@ package final class WindowsWidgetRuntimeBootstrap: WidgetRuntimeBootstrap, Senda
             registry: registry,
             host: host,
             diagnostics: { [diagnostics] diagnostic in
-                diagnostics(
-                    WindowsWidgetBridgeDiagnostic(
-                        code: -3,
-                        message: String(describing: diagnostic)
-                    )
-                )
+                diagnostics(.runtime(diagnostic))
             }
         )
         let controller = WindowsWidgetProviderController(
             configuration: configuration,
             service: service,
             bridge: bridge,
+            actionHost: host,
             diagnostics: diagnostics
         )
+        router.installOverflowHandler { [weak bridge, weak router] in
+            guard let bridge else { return }
+            do {
+                try bridge.requestShutdown()
+            } catch {
+                router?.report(.shutdownRequestFailed())
+            }
+        }
         router.install(controller)
         WidgetRuntimeComposition.installControl(service)
         defer {
             router.uninstall()
-            WidgetRuntimeComposition.uninstall()
+            WidgetRuntimeComposition.uninstallControl()
         }
         do {
             try await withTaskCancellationHandler {
@@ -85,12 +95,7 @@ package final class WindowsWidgetRuntimeBootstrap: WidgetRuntimeBootstrap, Senda
                 do {
                     try bridge.requestShutdown()
                 } catch {
-                    diagnostics(
-                        WindowsWidgetBridgeDiagnostic(
-                            code: -4,
-                            message: String(describing: error)
-                        )
-                    )
+                    diagnostics(.shutdownRequestFailed())
                 }
             }
         } catch {

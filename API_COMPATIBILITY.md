@@ -3,7 +3,7 @@
 ## Purpose
 
 This document is the source-of-truth for the initial Widget API inventory and
-the M2/M3 source-compatibility surface.
+the M2/M3 source-compatibility surface and the bounded M7 interaction surface.
 It separates Apple SDK facts from OpenWidgetKit implementation status. An API
 listed here is not implemented merely because its Apple declaration and compile
 fixture have been recorded.
@@ -23,6 +23,10 @@ fixture have been recorded.
 | iOS SwiftUI / SwiftUICore / WidgetKit interfaces | SHA-256 `b74bc6cfd5a4e1d4b68de8a3d3c6ec6ec36e13b92d4d7db5b6436ef4925c9f51` / `5664b8453cfdb2534c9444d153d070a2a94f0fcc9b9d16f88e42eee60e94c0cc` / `6937fef5e51dda7842de9085b3206713bb9475c425ee88f6c2b6f246d52ee1b4` |
 | watchOS SwiftUI / SwiftUICore / WidgetKit interfaces | SHA-256 `b56d2190f2716aad4e46685f366c023dab44ae672ede558ca4ac16305cb153d6` / `4b1c9a11810fc3ae7d414966014d71115015fc48e65ad45783f6415d8c6a0cb5` / `b38b91345630636e5eaf4c9effcb33d66c7d155ae31439d4146cac1a67619a28` |
 | visionOS SwiftUI / SwiftUICore / WidgetKit interfaces | SHA-256 `fb46f2f2c9cff14cbe35b7eec19e55811cffcdc558e0b64771ecea3b40dae1b2` / `27e01eea3b2673579ee4befd4f7c99d3598292ec71112d7de94e453b97df85e9` / `de1e37b5fda694b5998c91218776be7e20e4b6afc53688b2b20fd86c31e0bdaf` |
+| macOS AppIntents / SwiftUI overlay interfaces | SHA-256 `94714e4a254dee4c1c437e8467be401608c2cfab64b09377a89cf22718c028ff` / `d0af683d3669cec03328ba749656ae2d6112afdc35f525901f03162989a47c1c` |
+| iOS AppIntents / SwiftUI overlay interfaces | SHA-256 `c50c82523db423749562ec53e9f9bf13d26be33ac4e5ce0f5d39faf8d102df72` / `5e808150275887388ab137c53dad9f80426c4f90743fcc05bba2b9918d30cb83` |
+| watchOS AppIntents / SwiftUI overlay interfaces | SHA-256 `8fba6a4e4d342cb21576e89e8917db1551745ba3725bc08a8aed5649c1a4c93d` / `81b686777b2ad0925edfb4bc29e494860308311f3db2a0e062feb7893abb6f57` |
+| visionOS AppIntents / SwiftUI overlay interfaces | SHA-256 `57b3bebfc8ad4d5c6ef35b297a85f4d5f7ea6584a0bf76e5aff291ba2d97ce4d` / `955412582943e88cc95054077efecda5bc5b70fd698f211fcec986c9084fa175` |
 
 The interface hashes are verification inputs. The SDK files remain the
 authority; this repository does not copy the complete Apple interfaces.
@@ -46,6 +50,10 @@ surface. The declarations below normalize SDK qualification such as
 | `TimelineReloadPolicy` | WidgetKit | `Equatable` only; `.atEnd`, `.never`, and `.after(Date)`; no public initializer | same WidgetKit initial availability; not `Sendable` | Implemented initial slice |
 | `WidgetFamily` | WidgetKit | raw `Int`; raw-representable, debug/string convertible, `Sendable`, and `Hashable`; initial cases are small, medium, and large | enum has same WidgetKit initial availability; the three initial cases are unavailable on watchOS and tvOS | Implemented initial slice |
 | `WidgetCenter` | WidgetKit | singleton with no public initializer; callback current-configurations query; reload by kind; reload all; nested `UserInfoKey` exposes kind, family, and activity-ID keys | same WidgetKit initial availability; configuration callback is `@preconcurrency` with an `@escaping @Sendable` completion | M3 |
+| `PersistentlyIdentifiable` | AppIntents | `static persistentIdentifier`; the default derives a stable type identity | iOS 16, macOS 13, watchOS 9, tvOS 16 | M7 bounded subset |
+| `AppIntent` | AppIntents | refines `PersistentlyIdentifiable` and `Sendable`; `associatedtype PerformResult: IntentResult`; `static title`; `init()`; async throwing `perform()`; default `openAppWhenRun` | iOS 16, macOS 13, watchOS 9, tvOS 16; the bounded replacement intentionally omits parameters, summaries, entities, donation, and system discovery | M7 bounded subset |
+| `IntentResult` / `IntentResultContainer` | AppIntents | four associated types (`Value`, `Snippet`, `Dialog`, and `OpensAppIntent`), `value`, four generic container arguments, and the all-`Never` `.result()` specialization | iOS 16, macOS 13, watchOS 9, tvOS 16; the replacement declares the exact supported no-value shape but does not declare unsupported value/dialog/snippet/open-intent protocols or factories | M7 bounded no-value subset |
+| `Button<Label>` intent initializer | SwiftUI + AppIntents overlay | `init<I>(intent: I, @ViewBuilder label: () -> Label) where I: AppIntent`; `init(role:intent:label:)`; `LocalizedStringKey`, `LocalizedStringResource`, and `StringProtocol` text overloads | iOS 17, macOS 14, watchOS 10, tvOS 17 | M7 bounded subset |
 
 `Widget.main()` and `WidgetBundle.main()` are supplied by WidgetKit extensions
 and are `@MainActor @preconcurrency`. Swift owns the process entry point in the
@@ -113,6 +121,43 @@ public struct Timeline<EntryType> where EntryType: TimelineEntry {
 }
 ```
 
+### M7 interaction subset
+
+The supported widget interaction entry point is the same App Intents-backed
+button workflow Apple documents for interactive widgets. Closure-only buttons
+are not used as a transport because archived widget views cannot invoke an
+arbitrary in-process closure on Apple. The replacement currently supports a
+`Text` label, optional `ButtonRole`, all three Apple text-title input families,
+`PersistentlyIdentifiable`, an in-process `AppIntent.perform()`, and the no-value
+`.result()` intent result.
+`LocalizedStringResource` remains a resource value through semantic lowering and
+is resolved only when the selected renderer materializes its data payload.
+Apple platforms and Windows use the toolchain Foundation declaration. The
+pinned normal WASM Foundation omits this value family, so OpenFoundation owns a
+WASI supplement for the bounded M7 surface: literal/string interpolation,
+resource metadata, equality, coding, explicit-bundle lookup, and default-value
+rendering. WASI has no recoverable executable `.main` or `.forClass` bundle;
+those descriptions render the default value, and coding `.forClass` fails with
+`EncodingError` because `AnyClass` identity cannot be restored. Advanced
+Foundation formatting/interpolation overloads are outside the current M7 API
+surface and are not declared by the supplement.
+`openAppWhenRun == true` fails during
+semantic lowering because the Windows provider has no foreground-app activation
+contract in this milestone.
+
+The role overload preserves `.destructive` and the iOS 26-era `.confirm` as
+Adaptive Cards action styles. `.cancel`, the iOS 26-era `.close`, and
+action-title font, foreground-color, or line-limit overrides fail explicitly
+because Adaptive Cards 1.6 has no equivalent semantics for this host path.
+
+The replacement `AppIntents` module is deliberately smaller than Apple's full
+framework. Parameter property wrappers, entities, parameter summaries,
+discovery, donation, dialog/value/snippet results, `Toggle`, and foreground
+continuation are not declared. A custom `IntentResult` can satisfy the public
+protocol for source compatibility, but widget lowering rejects every result
+except the module's no-value `.result()` container. This preserves explicit
+failure instead of pretending unsupported result semantics execute.
+
 ### Intentional portable differences
 
 Apple's `WidgetConfiguration` has a public low-level graph requirement whose
@@ -173,7 +218,8 @@ an unrelated placeholder value.
 - Live Activities and ActivityKit;
 - Control Widgets;
 - accessory and post-iOS-14 widget families;
-- interactive App Intents and configuration recommendations;
+- App Intent parameters, entities, discovery, donation, configuration
+  recommendations, `Toggle`, and foreground execution;
 - preview-only and developer-tools APIs;
 - Apple low-level graph implementation types.
 
@@ -204,17 +250,18 @@ flowchart LR
 | `Fixtures/AppleAPI/OpenWidgetKitFoundationSurface.swift` | `CGSize` and both environment-variant key-path subscripts |
 | `Fixtures/SharedAPI/InitialTimelineSurface.swift` | one source file against Apple and replacement timeline APIs, including Foundation geometry |
 | `Fixtures/SharedAPI/M2M3Surface.swift` | the M2 View DSL, static configuration modifiers, WidgetBundle builder, and WidgetCenter call shapes against Apple and replacement modules |
+| `Fixtures/SharedAPI/M7InteractionSurface.swift` | one AppIntent-backed Button source against Apple system modules and the replacement products |
 | `Fixtures/BehaviorAPI/M1Behavior.swift` | differential runtime output for initial family, reload-policy, and relevance behavior |
 | `Fixtures/NegativeAPI/TimelineReloadPolicySendable.swift` | both implementations reject the non-Apple `Sendable` conformance |
 | `Fixtures/NegativeAPI/ViewBuilderSendable.swift` | both implementations preserve the explicitly unavailable `ViewBuilder: Sendable` conformance |
-| `Fixtures/WorkspaceAPI` | OpenWidgetKit context geometry passes directly into OpenCoreGraphics APIs without conversion |
+| `Fixtures/WorkspaceAPI/FoundationGeometryIdentity.swift` | Separately built OpenWidgetKit and OpenCoreGraphics modules accept the same context geometry without conversion or a mixed local/remote SwiftPM graph |
 
 Run `scripts/verify-m1-api.sh` on the pinned macOS host. It validates every
 recorded interface hash, typechecks Apple fixtures for macOS 11, iOS 14,
 watchOS 9, and visionOS 26, confirms WidgetKit is absent from tvOS, builds the
 replacement fixture, checks the negative conformance, compares
-Apple/replacement runtime output, and builds the isolated workspace identity
-fixture.
+Apple/replacement runtime output, then directly typechecks the geometry identity
+fixture against separately built OpenWidgetKit and OpenCoreGraphics modules.
 
 ## Pinned Windows compile baseline
 
@@ -234,7 +281,8 @@ library, and runtime DLLs must all come from this one installer. The package doe
 not download a separate swift-foundation product.
 
 `scripts/verify-m1-windows.ps1` is the Windows execution gate. It builds the
-shared replacement and OpenCoreGraphics identity fixtures, executes the
+shared replacement and OpenCoreGraphics modules independently, typechecks their
+geometry identity fixture directly, executes the
 replacement behavior fixture, proves the non-Apple `Sendable` conformance is
 rejected, and emits the exact installed Foundation artifact hashes. A macOS
 cross-compile is not accepted as Windows evidence.
@@ -244,13 +292,17 @@ executes the gate, and uploads the JSON evidence. The workflow is dispatch-only.
 
 ## Evidence status
 
-As of 2026-08-21, the pinned Apple API fixtures, including the M2/M3 source
+As of 2026-08-21, the pinned Apple API fixtures, including the M2/M3/M7 source
 surface, typecheck for macOS 11, iOS 14, watchOS 9, and visionOS 26, and the
-replacement checks pass on the local arm64 macOS host. All 50 focused M1-M3,
-12 M4, and 13 M5 Native test declarations pass, and the normal WASM API,
-behavior, and M4 targets build with the pinned Swift 6.4 snapshot. The M5
+replacement checks pass on the local arm64 macOS host. All 97 focused Native
+tests pass, and the normal WASM API, behavior, and M4 targets build with the
+pinned Swift 6.4 snapshot and accompanying OpenFoundation localized-value
+supplement. The M5
 Windows gate additionally compiles the package test graph on native x64 and
-ARM64 runners; it does not execute those behavior tests on Windows.
+ARM64 runners. That recorded M5 evidence did not execute the behavior tests on
+Windows. The revised push/pull-request workflow now executes the compiled test
+runner with a ten-minute timeout and resolves OpenFoundation through the pinned
+remote revision, but that revised workflow has not run yet.
 
 The pinned Windows gate passed on the `win25-vs2026` x86_64 runner in
 [GitHub Actions run 32387237114](https://github.com/1amageek/OpenWidgetKit/actions/runs/32387237114)

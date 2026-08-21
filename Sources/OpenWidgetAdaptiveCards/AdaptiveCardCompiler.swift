@@ -72,6 +72,7 @@ package final class AdaptiveCardCompiler: Sendable {
         case text
         case imageResource
         case imageLabel
+        case actionTitle
     }
 
     private struct BindingDescriptor: Sendable {
@@ -210,6 +211,15 @@ package final class AdaptiveCardCompiler: Sendable {
                         "spacing": .string("none")
                     ])
                 ]
+            case .action(let action):
+                return [
+                    try compileAction(
+                        action,
+                        node: node,
+                        nodePath: nodePath,
+                        inheritedStyle: textStyle
+                    )
+                ]
             case .modified(let modifier):
                 return try compileModified(
                     modifier,
@@ -298,6 +308,58 @@ package final class AdaptiveCardCompiler: Sendable {
                 object["altText"] = .string("")
             }
             return .object(object)
+        }
+
+        private mutating func compileAction(
+            _ action: WidgetActionDescriptor,
+            node: WidgetNode,
+            nodePath: [Int],
+            inheritedStyle: TextStyle
+        ) throws -> CanonicalJSON {
+            try requireNoChildren(node, kind: "Button")
+            guard action.title.font == nil,
+                  action.title.foregroundColor == nil,
+                  inheritedStyle.font == nil,
+                  inheritedStyle.foregroundColor == nil,
+                  inheritedStyle.lineLimit == nil else {
+                throw AdaptiveCardCompilationError.unsupportedNode(
+                    "Adaptive Cards action titles cannot preserve Text font, foreground-color, or line-limit overrides."
+                )
+            }
+            let verb = actionVerb(action.id)
+            var execute: [String: CanonicalJSON] = [
+                "type": .string("Action.Execute"),
+                "title": .string(bind(nodePath: nodePath, role: .actionTitle)),
+                "verb": .string(verb),
+                "data": .object([
+                    "openWidgetActionID": .string(verb)
+                ]),
+                "associatedInputs": .string("none")
+            ]
+            switch action.role {
+            case .standard:
+                break
+            case .cancel:
+                throw AdaptiveCardCompilationError.unsupportedNode(
+                    "Adaptive Cards Action.Execute has no cancel-role semantic equivalent."
+                )
+            case .close:
+                throw AdaptiveCardCompilationError.unsupportedNode(
+                    "Adaptive Cards Action.Execute has no close-role semantic equivalent."
+                )
+            case .destructive:
+                execute["style"] = .string("destructive")
+            case .confirm:
+                execute["style"] = .string("positive")
+            }
+            return .object([
+                "type": .string("ActionSet"),
+                "actions": .array([.object(execute)])
+            ])
+        }
+
+        private func actionVerb(_ id: WidgetActionID) -> String {
+            "\(id.rawValue)|theme:\(bindingNamespace)"
         }
 
         private mutating func compileChildren(
@@ -654,6 +716,7 @@ package final class AdaptiveCardCompiler: Sendable {
     package func compile(_ update: RuntimeWidgetUpdate) throws -> CompiledWidgetPayload {
         let documents = update.entry.documents
         try validate(documents: documents, family: update.family)
+        let actionBindings = try actionBindings(documents: documents)
         let cacheKey = templateCacheKey(
             documents: documents,
             family: update.family
@@ -674,6 +737,7 @@ package final class AdaptiveCardCompiler: Sendable {
                 dataJSON: try dataJSON(dataOutputs),
                 structureIdentity: cachedEntry.structureIdentity,
                 resourceReferences: resourceReferences(dataOutputs),
+                actionBindings: actionBindings,
                 templateCompilationWasSkipped: true
             )
         }
@@ -730,6 +794,7 @@ package final class AdaptiveCardCompiler: Sendable {
             dataJSON: try dataJSON(dataOutputs),
             structureIdentity: structureIdentity,
             resourceReferences: resourceReferences(dataOutputs),
+            actionBindings: actionBindings,
             templateCompilationWasSkipped: false
         )
     }
@@ -847,6 +912,11 @@ package final class AdaptiveCardCompiler: Sendable {
                     throw bindingPlanMismatch()
                 }
                 data[binding.key] = .string(try textResolver.resolve(label))
+            case .actionTitle:
+                guard case .action(let action) = node.kind else {
+                    throw bindingPlanMismatch()
+                }
+                data[binding.key] = .string(try textResolver.resolve(action.title))
             }
             nextBindingIndex += 1
         }
@@ -937,6 +1007,12 @@ package final class AdaptiveCardCompiler: Sendable {
             components.append(String(reflecting: minLength))
         case .divider:
             components.append("divider")
+        case .action(let action):
+            components.append("action")
+            components.append(action.id.rawValue)
+            components.append(String(reflecting: action.role))
+            components.append(action.title.font?.rawValue ?? "nil")
+            components.append(String(reflecting: action.title.foregroundColor))
         case .modified(let modifier):
             components.append("modified")
             components.append(String(reflecting: modifier))
@@ -984,6 +1060,55 @@ package final class AdaptiveCardCompiler: Sendable {
         deduplicatedResourceReferences(outputs.flatMap(\.resourceReferences))
     }
 
+    private func actionBindings(
+        documents: [WidgetDocument]
+    ) throws -> [AdaptiveCardActionBinding] {
+        guard let canonicalDocument = documents.sorted(by: {
+            themeRank(themeName($0)) < themeRank(themeName($1))
+        }).first else {
+            return []
+        }
+        let canonicalIDs = Set(canonicalDocument.actions.keys)
+        for document in documents {
+            guard Set(document.actions.keys) == canonicalIDs else {
+                throw AdaptiveCardCompilationError.invalidDocument(
+                    "Every environment variant must expose the same action identities."
+                )
+            }
+            for id in canonicalIDs {
+                guard document.actions[id]?.handlerIdentity ==
+                        canonicalDocument.actions[id]?.handlerIdentity else {
+                    throw AdaptiveCardCompilationError.invalidDocument(
+                        "Every environment variant must bind an action identity to the same persistent intent identity."
+                    )
+                }
+            }
+        }
+        return documents.sorted {
+            themeRank(themeName($0)) < themeRank(themeName($1))
+        }.flatMap { document in
+            document.actions.values.sorted {
+                $0.id.rawValue < $1.id.rawValue
+            }.map { action in
+                let verb = actionVerb(
+                    action.id,
+                    themeName: themeName(document)
+                )
+                return AdaptiveCardActionBinding(
+                    verb: verb,
+                    action: action
+                )
+            }
+        }
+    }
+
+    private func actionVerb(
+        _ id: WidgetActionID,
+        themeName: String
+    ) -> String {
+        "\(id.rawValue)|theme:\(themeName)"
+    }
+
     private func deduplicatedResourceReferences(
         _ references: [AdaptiveCardResourceReference]
     ) -> [AdaptiveCardResourceReference] {
@@ -1021,7 +1146,17 @@ package final class AdaptiveCardCompiler: Sendable {
                 throw AdaptiveCardCompilationError.duplicateThemeVariant(theme)
             }
             var nodeIDs: Set<WidgetNodeID> = []
-            try validate(node: document.root, nodeIDs: &nodeIDs)
+            var actionIDs: Set<WidgetActionID> = []
+            try validate(
+                node: document.root,
+                nodeIDs: &nodeIDs,
+                actionIDs: &actionIDs
+            )
+            guard actionIDs == Set(document.actions.keys) else {
+                throw AdaptiveCardCompilationError.invalidDocument(
+                    "The document action table must exactly match its action nodes."
+                )
+            }
         }
         for requiredTheme in ["light", "dark"] where !themes.contains(requiredTheme) {
             throw AdaptiveCardCompilationError.missingThemeVariant(requiredTheme)
@@ -1030,15 +1165,32 @@ package final class AdaptiveCardCompiler: Sendable {
 
     private func validate(
         node: WidgetNode,
-        nodeIDs: inout Set<WidgetNodeID>
+        nodeIDs: inout Set<WidgetNodeID>,
+        actionIDs: inout Set<WidgetActionID>
     ) throws {
         guard nodeIDs.insert(node.id).inserted else {
             throw AdaptiveCardCompilationError.invalidDocument(
                 "Widget node identities must be unique within a document."
             )
         }
+        if case .action(let action) = node.kind {
+            guard action.id == WidgetActionID(nodeID: node.id) else {
+                throw AdaptiveCardCompilationError.invalidDocument(
+                    "An action identity must be derived from its semantic node identity."
+                )
+            }
+            guard actionIDs.insert(action.id).inserted else {
+                throw AdaptiveCardCompilationError.invalidDocument(
+                    "Widget action identities must be unique within a document."
+                )
+            }
+        }
         for child in node.children {
-            try validate(node: child, nodeIDs: &nodeIDs)
+            try validate(
+                node: child,
+                nodeIDs: &nodeIDs,
+                actionIDs: &actionIDs
+            )
         }
     }
 

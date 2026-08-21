@@ -1,3 +1,4 @@
+import AppIntents
 import OpenFoundation
 import OpenWidgetRuntime
 @testable import OpenWidgetAdaptiveCards
@@ -21,6 +22,20 @@ private struct FixtureResourceResolver: AdaptiveCardResourceResolving {
     }
 }
 
+private struct LocalizedResourceFixtureTextResolver: WidgetTextResolving {
+    let expected: LocalizedStringResource
+
+    func resolve(_ text: WidgetText) throws -> String {
+        guard case .localizedResource(let resource) = text.storage,
+              resource == expected else {
+            throw AdaptiveCardCompilationError.invalidLocalizedString(
+                "The localized resource did not reach the rendering boundary."
+            )
+        }
+        return "Resolved at render time"
+    }
+}
+
 @MainActor
 struct AdaptiveCardCompilerTests {
     @Test
@@ -39,6 +54,149 @@ struct AdaptiveCardCompilerTests {
         #expect(payload.dataJSON == #"{"dark":{"v0":"Dark"},"light":{"v0":"Light"}}"#)
         #expect(payload.structureIdentity.count == 64)
         #expect(!payload.templateCompilationWasSkipped)
+    }
+
+    @Test
+    func compilesIntentButtonIntoBoundActionExecute() throws {
+        let compiler = try AdaptiveCardCompiler(
+            resourceResolver: FixtureResourceResolver()
+        )
+        let payload = try compiler.compile(
+            makeUpdate(
+                light: Button("Run", intent: CompilerFixtureIntent()),
+                dark: Button("Run dark", intent: CompilerFixtureIntent())
+            )
+        )
+
+        #expect(payload.templateJSON.contains(#""type":"ActionSet""#))
+        #expect(payload.templateJSON.contains(#""type":"Action.Execute""#))
+        #expect(payload.templateJSON.contains(#""associatedInputs":"none""#))
+        #expect(payload.dataJSON.contains("Run"))
+        #expect(payload.dataJSON.contains("Run dark"))
+        #expect(payload.actionBindings.count == 2)
+        #expect(payload.actionBindings.allSatisfy {
+            payload.templateJSON.contains($0.verb)
+        })
+    }
+
+    @Test
+    func resolvesLocalizedStringResourcesAtTheDataRenderingBoundary() throws {
+        let resource: LocalizedStringResource = "Deferred title"
+        let compiler = try AdaptiveCardCompiler(
+            textResolver: LocalizedResourceFixtureTextResolver(expected: resource),
+            resourceResolver: FixtureResourceResolver()
+        )
+        let payload = try compiler.compile(
+            makeUpdate(
+                light: Button(resource, intent: CompilerFixtureIntent()),
+                dark: Button(resource, intent: CompilerFixtureIntent())
+            )
+        )
+
+        #expect(payload.dataJSON.contains("Resolved at render time"))
+    }
+
+    @Test
+    func rejectsActionSetsThatDifferAcrossEnvironmentVariants() throws {
+        let compiler = try AdaptiveCardCompiler(
+            resourceResolver: FixtureResourceResolver()
+        )
+        let update = try makeUpdate(
+            light: Button("Run", intent: CompilerFixtureIntent()),
+            dark: Text(verbatim: "No action")
+        )
+
+        #expect(throws: AdaptiveCardCompilationError.self) {
+            try compiler.compile(update)
+        }
+
+        let mismatchedHandler = try makeUpdate(
+            light: Button("Run", intent: CompilerFixtureIntent()),
+            dark: Button("Run", intent: AlternativeCompilerFixtureIntent())
+        )
+        #expect(throws: AdaptiveCardCompilationError.self) {
+            try compiler.compile(mismatchedHandler)
+        }
+    }
+
+    @Test
+    func rejectsButtonSemanticsWithoutAnAdaptiveCardsEquivalent() throws {
+        let compiler = try AdaptiveCardCompiler(
+            resourceResolver: FixtureResourceResolver()
+        )
+        let cancel = try makeUpdate(
+            light: Button(
+                "Cancel",
+                role: .cancel,
+                intent: CompilerFixtureIntent()
+            ),
+            dark: Button(
+                "Cancel",
+                role: .cancel,
+                intent: CompilerFixtureIntent()
+            )
+        )
+        let styled = try makeUpdate(
+            light: Button(intent: CompilerFixtureIntent()) {
+                Text(verbatim: "Styled").font(.headline)
+            },
+            dark: Button(intent: CompilerFixtureIntent()) {
+                Text(verbatim: "Styled").font(.headline)
+            }
+        )
+        let inheritedStyle = try makeUpdate(
+            light: Button("Styled", intent: CompilerFixtureIntent())
+                .lineLimit(1),
+            dark: Button("Styled", intent: CompilerFixtureIntent())
+                .lineLimit(1)
+        )
+
+        #expect(throws: AdaptiveCardCompilationError.self) {
+            try compiler.compile(cancel)
+        }
+        _ = try compiler.compile(
+            makeUpdate(
+                light: Button("Plain", intent: CompilerFixtureIntent()),
+                dark: Button("Plain", intent: CompilerFixtureIntent())
+            )
+        )
+        #expect(throws: AdaptiveCardCompilationError.self) {
+            try compiler.compile(styled)
+        }
+        #expect(throws: AdaptiveCardCompilationError.self) {
+            try compiler.compile(inheritedStyle)
+        }
+    }
+
+    @Test
+    func preservesTheIntentInstanceForEachEnvironmentVariant() async throws {
+        let recorder = CompilerActionRecorder()
+        let compiler = try AdaptiveCardCompiler(
+            resourceResolver: FixtureResourceResolver()
+        )
+        let payload = try compiler.compile(
+            makeUpdate(
+                light: Button(
+                    "Light",
+                    intent: CompilerRecordingIntent(recorder: recorder, value: 1)
+                ),
+                dark: Button(
+                    "Dark",
+                    intent: CompilerRecordingIntent(recorder: recorder, value: 2)
+                )
+            )
+        )
+        let light = try #require(
+            payload.actionBindings.first { $0.verb.hasSuffix("|theme:light") }
+        )
+        let dark = try #require(
+            payload.actionBindings.first { $0.verb.hasSuffix("|theme:dark") }
+        )
+
+        try await light.action.perform()
+        try await dark.action.perform()
+
+        #expect(await recorder.values == [1, 2])
     }
 
     @Test
@@ -323,5 +481,60 @@ struct AdaptiveCardCompilerTests {
                 additionalDocuments: [darkDocument]
             )
         )
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *)
+private struct CompilerFixtureIntent: AppIntent {
+    static let title: LocalizedStringResource = "Compiler fixture"
+    static let persistentIdentifier = "OpenWidgetKit.CompilerFixtureIntent"
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        .result()
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *)
+private struct AlternativeCompilerFixtureIntent: AppIntent {
+    static let title: LocalizedStringResource = "Alternative compiler fixture"
+    static let persistentIdentifier = "OpenWidgetKit.AlternativeCompilerFixtureIntent"
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        .result()
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *)
+private struct CompilerRecordingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Recording fixture"
+
+    private let recorder: CompilerActionRecorder
+    private let value: Int
+
+    init() {
+        recorder = CompilerActionRecorder()
+        value = 0
+    }
+
+    init(recorder: CompilerActionRecorder, value: Int) {
+        self.recorder = recorder
+        self.value = value
+    }
+
+    func perform() async throws -> some IntentResult {
+        await recorder.record(value)
+        return .result()
+    }
+}
+
+private actor CompilerActionRecorder {
+    private(set) var values: [Int] = []
+
+    func record(_ value: Int) {
+        values.append(value)
     }
 }

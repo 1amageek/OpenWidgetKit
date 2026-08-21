@@ -22,6 +22,14 @@ readonly EXPECTED_WATCHOS_WIDGETKIT_INTERFACE_SHA256="b38b91345630636e5eaf4c9eff
 readonly EXPECTED_XROS_SWIFTUI_INTERFACE_SHA256="fb46f2f2c9cff14cbe35b7eec19e55811cffcdc558e0b64771ecea3b40dae1b2"
 readonly EXPECTED_XROS_SWIFTUICORE_INTERFACE_SHA256="27e01eea3b2673579ee4befd4f7c99d3598292ec71112d7de94e453b97df85e9"
 readonly EXPECTED_XROS_WIDGETKIT_INTERFACE_SHA256="de1e37b5fda694b5998c91218776be7e20e4b6afc53688b2b20fd86c31e0bdaf"
+readonly EXPECTED_APPINTENTS_INTERFACE_SHA256="94714e4a254dee4c1c437e8467be401608c2cfab64b09377a89cf22718c028ff"
+readonly EXPECTED_APPINTENTS_SWIFTUI_INTERFACE_SHA256="d0af683d3669cec03328ba749656ae2d6112afdc35f525901f03162989a47c1c"
+readonly EXPECTED_IOS_APPINTENTS_INTERFACE_SHA256="c50c82523db423749562ec53e9f9bf13d26be33ac4e5ce0f5d39faf8d102df72"
+readonly EXPECTED_IOS_APPINTENTS_SWIFTUI_INTERFACE_SHA256="5e808150275887388ab137c53dad9f80426c4f90743fcc05bba2b9918d30cb83"
+readonly EXPECTED_WATCHOS_APPINTENTS_INTERFACE_SHA256="8fba6a4e4d342cb21576e89e8917db1551745ba3725bc08a8aed5649c1a4c93d"
+readonly EXPECTED_WATCHOS_APPINTENTS_SWIFTUI_INTERFACE_SHA256="81b686777b2ad0925edfb4bc29e494860308311f3db2a0e062feb7893abb6f57"
+readonly EXPECTED_XROS_APPINTENTS_INTERFACE_SHA256="57b3bebfc8ad4d5c6ef35b297a85f4d5f7ea6584a0bf76e5aff291ba2d97ce4d"
+readonly EXPECTED_XROS_APPINTENTS_SWIFTUI_INTERFACE_SHA256="955412582943e88cc95054077efecda5bc5b70fd698f211fcec986c9084fa175"
 readonly PINNED_TOOLCHAIN="org.swift.64202608141a"
 readonly SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPOSITORY_ROOT="$(cd "$SCRIPT_DIRECTORY/.." && pwd)"
@@ -95,6 +103,14 @@ readonly WATCHOS_WIDGETKIT_INTERFACE="$WATCHOS_SDK_PATH/System/Library/Framework
 readonly XROS_SWIFTUI_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/SwiftUI.framework/Modules/SwiftUI.swiftmodule/arm64e-apple-xros.swiftinterface"
 readonly XROS_SWIFTUICORE_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/SwiftUICore.framework/Modules/SwiftUICore.swiftmodule/arm64e-apple-xros.swiftinterface"
 readonly XROS_WIDGETKIT_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/WidgetKit.framework/Modules/WidgetKit.swiftmodule/arm64e-apple-xros.swiftinterface"
+readonly APPINTENTS_INTERFACE="$SDK_PATH/System/Library/Frameworks/AppIntents.framework/Modules/AppIntents.swiftmodule/arm64e-apple-macos.swiftinterface"
+readonly APPINTENTS_SWIFTUI_INTERFACE="$SDK_PATH/System/Library/Frameworks/_AppIntents_SwiftUI.framework/Modules/_AppIntents_SwiftUI.swiftmodule/arm64e-apple-macos.swiftinterface"
+readonly IOS_APPINTENTS_INTERFACE="$IOS_SDK_PATH/System/Library/Frameworks/AppIntents.framework/Modules/AppIntents.swiftmodule/arm64e-apple-ios.swiftinterface"
+readonly IOS_APPINTENTS_SWIFTUI_INTERFACE="$IOS_SDK_PATH/System/Library/Frameworks/_AppIntents_SwiftUI.framework/Modules/_AppIntents_SwiftUI.swiftmodule/arm64e-apple-ios.swiftinterface"
+readonly WATCHOS_APPINTENTS_INTERFACE="$WATCHOS_SDK_PATH/System/Library/Frameworks/AppIntents.framework/Modules/AppIntents.swiftmodule/arm64_32-apple-watchos.swiftinterface"
+readonly WATCHOS_APPINTENTS_SWIFTUI_INTERFACE="$WATCHOS_SDK_PATH/System/Library/Frameworks/_AppIntents_SwiftUI.framework/Modules/_AppIntents_SwiftUI.swiftmodule/arm64_32-apple-watchos.swiftinterface"
+readonly XROS_APPINTENTS_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/AppIntents.framework/Modules/AppIntents.swiftmodule/arm64e-apple-xros.swiftinterface"
+readonly XROS_APPINTENTS_SWIFTUI_INTERFACE="$XROS_SDK_PATH/System/Library/Frameworks/_AppIntents_SwiftUI.framework/Modules/_AppIntents_SwiftUI.swiftmodule/arm64e-apple-xros.swiftinterface"
 readonly SWIFTUI_INTERFACE_SHA256="$(shasum -a 256 "$SWIFTUI_INTERFACE" | awk '{print $1}')"
 readonly SWIFTUICORE_INTERFACE_SHA256="$(shasum -a 256 "$SWIFTUICORE_INTERFACE" | awk '{print $1}')"
 readonly WIDGETKIT_INTERFACE_SHA256="$(shasum -a 256 "$WIDGETKIT_INTERFACE" | awk '{print $1}')"
@@ -111,12 +127,21 @@ readonly WIDGETKIT_INTERFACE_SHA256="$(shasum -a 256 "$WIDGETKIT_INTERFACE" | aw
 [[ "$(shasum -a 256 "$XROS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_SWIFTUI_INTERFACE_SHA256" ]] || fail "visionOS SwiftUI interface drift"
 [[ "$(shasum -a 256 "$XROS_SWIFTUICORE_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_SWIFTUICORE_INTERFACE_SHA256" ]] || fail "visionOS SwiftUICore interface drift"
 [[ "$(shasum -a 256 "$XROS_WIDGETKIT_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_WIDGETKIT_INTERFACE_SHA256" ]] || fail "visionOS WidgetKit interface drift"
+[[ "$(shasum -a 256 "$APPINTENTS_INTERFACE" | awk '{print $1}')" == "$EXPECTED_APPINTENTS_INTERFACE_SHA256" ]] || fail "macOS AppIntents interface drift"
+[[ "$(shasum -a 256 "$APPINTENTS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_APPINTENTS_SWIFTUI_INTERFACE_SHA256" ]] || fail "macOS AppIntents SwiftUI overlay drift"
+[[ "$(shasum -a 256 "$IOS_APPINTENTS_INTERFACE" | awk '{print $1}')" == "$EXPECTED_IOS_APPINTENTS_INTERFACE_SHA256" ]] || fail "iOS AppIntents interface drift"
+[[ "$(shasum -a 256 "$IOS_APPINTENTS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_IOS_APPINTENTS_SWIFTUI_INTERFACE_SHA256" ]] || fail "iOS AppIntents SwiftUI overlay drift"
+[[ "$(shasum -a 256 "$WATCHOS_APPINTENTS_INTERFACE" | awk '{print $1}')" == "$EXPECTED_WATCHOS_APPINTENTS_INTERFACE_SHA256" ]] || fail "watchOS AppIntents interface drift"
+[[ "$(shasum -a 256 "$WATCHOS_APPINTENTS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_WATCHOS_APPINTENTS_SWIFTUI_INTERFACE_SHA256" ]] || fail "watchOS AppIntents SwiftUI overlay drift"
+[[ "$(shasum -a 256 "$XROS_APPINTENTS_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_APPINTENTS_INTERFACE_SHA256" ]] || fail "visionOS AppIntents interface drift"
+[[ "$(shasum -a 256 "$XROS_APPINTENTS_SWIFTUI_INTERFACE" | awk '{print $1}')" == "$EXPECTED_XROS_APPINTENTS_SWIFTUI_INTERFACE_SHA256" ]] || fail "visionOS AppIntents SwiftUI overlay drift"
 [[ ! -e "$TVOS_SDK_PATH/System/Library/Frameworks/WidgetKit.framework" ]] || fail "WidgetKit unexpectedly exists in the tvOS SDK"
 
 for fixture in Fixtures/AppleAPI/*.swift Fixtures/SharedAPI/*.swift; do
     TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swiftc \
         -parse-as-library \
         -swift-version 6 \
+        -Xfrontend -enable-cross-import-overlays \
         -typecheck \
         -sdk "$SDK_PATH" \
         "$fixture"
@@ -133,6 +158,7 @@ for platform_specification in \
         TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swiftc \
             -parse-as-library \
             -swift-version 6 \
+            -Xfrontend -enable-cross-import-overlays \
             -typecheck \
             -sdk "$platform_sdk_path" \
             -target "$platform_target" \
@@ -248,7 +274,30 @@ expect_typecheck_failure \
         Fixtures/NegativeAPI/ViewBuilderSendable.swift
 
 TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swift build \
-    --package-path Fixtures/WorkspaceAPI \
-    --target OpenWidgetKitWorkspaceAPIFixture
+    --package-path ../OpenCoreGraphics \
+    --target OpenCoreGraphics
+
+readonly OPENWIDGETKIT_MODULE_DIRECTORY="$(
+    TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swift build --show-bin-path
+)"
+readonly OPENCOREGRAPHICS_MODULE_DIRECTORY="$(
+    TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swift build \
+        --package-path ../OpenCoreGraphics \
+        --show-bin-path
+)"
+
+[[ -d "$OPENWIDGETKIT_MODULE_DIRECTORY/WidgetKit.swiftmodule" ]] || \
+    fail "replacement WidgetKit module was not found"
+[[ -d "$OPENCOREGRAPHICS_MODULE_DIRECTORY/OpenCoreGraphics.swiftmodule" ]] || \
+    fail "replacement OpenCoreGraphics module was not found"
+
+TOOLCHAINS="$PINNED_TOOLCHAIN" xcrun swiftc \
+    -parse-as-library \
+    -swift-version 6 \
+    -typecheck \
+    -sdk "$SDK_PATH" \
+    -I "$OPENWIDGETKIT_MODULE_DIRECTORY" \
+    -I "$OPENCOREGRAPHICS_MODULE_DIRECTORY" \
+    Fixtures/WorkspaceAPI/FoundationGeometryIdentity.swift
 
 printf 'OpenWidgetKit Apple and replacement API verification passed.\n'

@@ -1,6 +1,6 @@
 import OpenFoundation
 
-package struct RuntimeTimelineEntry: Equatable, Sendable {
+package struct RuntimeTimelineEntry: Sendable {
     package let date: Date
     package let document: WidgetDocument
     package let additionalDocuments: [WidgetDocument]

@@ -1,10 +1,11 @@
 import OpenWidgetRuntime
 
-package struct CompiledWidgetPayload: Equatable, Sendable {
+package struct CompiledWidgetPayload: Sendable {
     package let templateJSON: String
     package let dataJSON: String
     package let structureIdentity: String
     package let resourceReferences: [AdaptiveCardResourceReference]
+    package let actionBindings: [AdaptiveCardActionBinding]
     package let templateCompilationWasSkipped: Bool
 
     package init(
@@ -12,12 +13,14 @@ package struct CompiledWidgetPayload: Equatable, Sendable {
         dataJSON: String,
         structureIdentity: String,
         resourceReferences: [AdaptiveCardResourceReference],
+        actionBindings: [AdaptiveCardActionBinding],
         templateCompilationWasSkipped: Bool
     ) {
         self.templateJSON = templateJSON
         self.dataJSON = dataJSON
         self.structureIdentity = structureIdentity
         self.resourceReferences = resourceReferences
+        self.actionBindings = actionBindings
         self.templateCompilationWasSkipped = templateCompilationWasSkipped
     }
 }

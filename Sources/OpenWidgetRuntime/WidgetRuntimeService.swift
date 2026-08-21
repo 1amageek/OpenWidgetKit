@@ -52,7 +52,7 @@ package actor WidgetRuntimeService {
         host: any RuntimeWidgetHost,
         clock: any WidgetRuntimeClock = SystemWidgetRuntimeClock(),
         providerTimeout: Duration = .seconds(30),
-        diagnostics: @escaping WidgetRuntimeDiagnosticSink = { _ in }
+        diagnostics: @escaping WidgetRuntimeDiagnosticSink
     ) {
         self.registry = registry
         self.host = host
@@ -72,9 +72,7 @@ package actor WidgetRuntimeService {
             throw WidgetRuntimeError.hostUnavailable
         }
         guard instances[id] == nil else {
-            throw WidgetRuntimeError.hostRejected(
-                message: "Widget instance '\(id)' already exists."
-            )
+            throw WidgetRuntimeError.duplicateInstance(id)
         }
         guard let definition = await registry.definition(for: kind) else {
             throw WidgetRuntimeError.unknownKind(kind)
@@ -102,7 +100,12 @@ package actor WidgetRuntimeService {
                         generation: generation
                     )
                 } catch {
-                    recordHostFailure(error, instanceID: id)
+                    recordHostFailure(
+                        error,
+                        instanceID: id,
+                        kind: failedInstance.kind,
+                        operation: .remove
+                    )
                 }
             }
             throw error
@@ -160,8 +163,31 @@ package actor WidgetRuntimeService {
         do {
             try await startRequest(for: instanceID)
         } catch {
-            recordHostFailure(error, instanceID: instanceID)
+            recordHostFailure(
+                error,
+                instanceID: instanceID,
+                operation: .timelineRequest
+            )
         }
+    }
+
+    package func reload(
+        instanceID: String,
+        expectedGeneration: UInt64
+    ) async throws {
+        guard !isShutdown else {
+            throw WidgetRuntimeError.hostUnavailable
+        }
+        guard instances[instanceID] != nil else {
+            throw WidgetRuntimeError.unknownInstance(instanceID)
+        }
+        guard generations[instanceID] == expectedGeneration else {
+            throw WidgetRuntimeError.staleGeneration(
+                instanceID: instanceID,
+                generation: expectedGeneration
+            )
+        }
+        try await startRequest(for: instanceID)
     }
 
     package func reload(kind: String) async {
@@ -176,7 +202,11 @@ package actor WidgetRuntimeService {
             do {
                 try await startRequest(for: id)
             } catch {
-                recordHostFailure(error, instanceID: id)
+                recordHostFailure(
+                    error,
+                    instanceID: id,
+                    operation: .timelineRequest
+                )
             }
         }
     }
@@ -186,7 +216,11 @@ package actor WidgetRuntimeService {
             do {
                 try await startRequest(for: id)
             } catch {
-                recordHostFailure(error, instanceID: id)
+                recordHostFailure(
+                    error,
+                    instanceID: id,
+                    operation: .timelineRequest
+                )
             }
         }
     }
@@ -201,7 +235,12 @@ package actor WidgetRuntimeService {
                 generation: generation
             )
         } catch {
-            recordHostFailure(error, instanceID: id)
+            recordHostFailure(
+                error,
+                instanceID: id,
+                kind: instance.kind,
+                operation: .remove
+            )
         }
     }
 
@@ -228,7 +267,7 @@ package actor WidgetRuntimeService {
         for instance in removedInstances.values {
             instance.task?.cancel()
         }
-        for (id, _) in removedInstances {
+        for (id, instance) in removedInstances {
             do {
                 let generation = try advanceGeneration(for: id)
                 try await host.remove(
@@ -236,7 +275,12 @@ package actor WidgetRuntimeService {
                     generation: generation
                 )
             } catch {
-                recordHostFailure(error, instanceID: id)
+                recordHostFailure(
+                    error,
+                    instanceID: id,
+                    kind: instance.kind,
+                    operation: .remove
+                )
             }
         }
     }
@@ -256,10 +300,10 @@ package actor WidgetRuntimeService {
             try await host.invalidate(instanceID: id, generation: generation)
         } catch let error as WidgetRuntimeError {
             throw error
+        } catch let error as any WidgetRuntimeFailureConvertible {
+            throw error
         } catch {
-            throw WidgetRuntimeError.hostRejected(
-                message: String(describing: error)
-            )
+            throw WidgetRuntimeError.hostOperationFailed
         }
         guard isCurrent(instanceID: id, generation: generation) else { return }
         instance.task = Task { [self] in
@@ -269,9 +313,7 @@ package actor WidgetRuntimeService {
                     environmentVariants[index].family = configuration.family
                 }
                 guard let environment = environmentVariants.first else {
-                    throw WidgetRuntimeError.hostRejected(
-                        message: "A widget instance must contain at least one environment variant."
-                    )
+                    throw WidgetRuntimeError.missingEnvironmentVariants
                 }
                 let context = RuntimeProviderContext(
                     family: configuration.family,
@@ -284,7 +326,14 @@ package actor WidgetRuntimeService {
                 let timeline = try await definition.requestTimeline(
                     context: context,
                     timeout: timeout,
-                    diagnostics: diagnostics
+                    diagnostics: { diagnostic in
+                        diagnostics(
+                            diagnostic.correlated(
+                                instanceID: id,
+                                generation: generation
+                            )
+                        )
+                    }
                 )
                 try Task.checkCancellation()
                 await consume(
@@ -298,7 +347,7 @@ package actor WidgetRuntimeService {
                 recordFailure(error, instanceID: id, generation: generation)
             } catch {
                 recordFailure(
-                    .hostRejected(message: String(describing: error)),
+                    .providerFailed,
                     instanceID: id,
                     generation: generation
                 )
@@ -317,10 +366,10 @@ package actor WidgetRuntimeService {
             try await host.invalidate(instanceID: id, generation: generation)
         } catch let error as WidgetRuntimeError {
             throw error
+        } catch let error as any WidgetRuntimeFailureConvertible {
+            throw error
         } catch {
-            throw WidgetRuntimeError.hostRejected(
-                message: String(describing: error)
-            )
+            throw WidgetRuntimeError.hostOperationFailed
         }
     }
 
@@ -383,6 +432,7 @@ package actor WidgetRuntimeService {
                     diagnostics(
                         .nonAdvancingReload(
                             instanceID: instanceID,
+                            generation: generation,
                             scheduledDate: event.date,
                             currentDate: now
                         )
@@ -423,7 +473,11 @@ package actor WidgetRuntimeService {
                 do {
                     try await startRequest(for: instanceID)
                 } catch {
-                    recordHostFailure(error, instanceID: instanceID)
+                    recordHostFailure(
+                        error,
+                        instanceID: instanceID,
+                        operation: .timelineRequest
+                    )
                 }
                 return
             }
@@ -456,9 +510,12 @@ package actor WidgetRuntimeService {
             try await host.apply(update)
         } catch {
             diagnostics(
-                .hostUpdateFailed(
+                .operationFailed(
                     instanceID: instanceID,
-                    message: String(describing: error)
+                    kind: instance.kind,
+                    generation: generation,
+                    operation: .update,
+                    cause: WidgetRuntimeFailureCode(error)
                 )
             )
         }
@@ -511,18 +568,29 @@ package actor WidgetRuntimeService {
     ) {
         guard isCurrent(instanceID: instanceID, generation: generation) else { return }
         diagnostics(
-            .hostUpdateFailed(
+            .operationFailed(
                 instanceID: instanceID,
-                message: String(describing: error)
+                kind: instances[instanceID]?.kind,
+                generation: generation,
+                operation: .timelineRequest,
+                cause: WidgetRuntimeFailureCode(error)
             )
         )
     }
 
-    private func recordHostFailure(_ error: any Error, instanceID: String) {
+    private func recordHostFailure(
+        _ error: any Error,
+        instanceID: String,
+        kind: String? = nil,
+        operation: WidgetRuntimeOperation
+    ) {
         diagnostics(
-            .hostUpdateFailed(
+            .operationFailed(
                 instanceID: instanceID,
-                message: String(describing: error)
+                kind: kind ?? instances[instanceID]?.kind,
+                generation: generations[instanceID],
+                operation: operation,
+                cause: WidgetRuntimeFailureCode(error)
             )
         )
     }

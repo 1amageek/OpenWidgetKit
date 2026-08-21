@@ -1,6 +1,9 @@
+import OpenFoundation
+
 package struct WidgetText: Equatable, Sendable {
     package enum Storage: Equatable, Sendable {
         case verbatim(String)
+        case localizedResource(LocalizedStringResource)
         case localized(
             key: String,
             tableName: String?,

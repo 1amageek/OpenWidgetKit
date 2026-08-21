@@ -9,6 +9,10 @@ let package = Package(
     ],
     products: [
         .library(
+            name: "AppIntents",
+            targets: ["AppIntents"]
+        ),
+        .library(
             name: "SwiftUI",
             targets: ["SwiftUI"]
         ),
@@ -18,7 +22,10 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(path: "../OpenFoundation")
+        .package(
+            url: "https://github.com/1amageek/OpenFoundation.git",
+            revision: "88ed849f1cf978a4b8af2d71413c38f153606271"
+        )
     ],
     targets: [
         .target(
@@ -28,8 +35,15 @@ let package = Package(
             ]
         ),
         .target(
+            name: "AppIntents",
+            dependencies: [
+                .product(name: "OpenFoundation", package: "OpenFoundation")
+            ]
+        ),
+        .target(
             name: "SwiftUI",
             dependencies: [
+                "AppIntents",
                 "OpenWidgetRuntime",
                 .product(name: "OpenFoundation", package: "OpenFoundation")
             ]
@@ -76,7 +90,7 @@ let package = Package(
         ),
         .target(
             name: "OpenWidgetKitAPIFixture",
-            dependencies: ["SwiftUI", "WidgetKit"],
+            dependencies: ["AppIntents", "SwiftUI", "WidgetKit"],
             path: "Fixtures/SharedAPI"
         ),
         .executableTarget(
@@ -98,7 +112,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftUITests",
-            dependencies: ["SwiftUI", "OpenWidgetRuntime"]
+            dependencies: ["AppIntents", "SwiftUI", "OpenWidgetRuntime"]
         ),
         .testTarget(
             name: "WidgetKitTests",
@@ -107,6 +121,7 @@ let package = Package(
         .testTarget(
             name: "OpenWidgetAdaptiveCardsTests",
             dependencies: [
+                "AppIntents",
                 "OpenWidgetAdaptiveCards",
                 "OpenWidgetRuntime",
                 "SwiftUI",

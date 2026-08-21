@@ -54,7 +54,8 @@ package func makeWidgetDocument<Content: View>(
         return WidgetDocument(
             root: root,
             environment: context.environment,
-            resources: context.resources
+            resources: context.resources,
+            actions: context.actions
         )
     }
 }

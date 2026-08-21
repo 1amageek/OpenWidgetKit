@@ -269,6 +269,16 @@ interactive Viewは安定したaction IDとpayloadへ変換し、Windows `Action
 Widget interactionはdiscrete host actionとして処理し、UIKit/AppKit responder chainを
 要求してはいけません。将来一般application UIを実装する場合は別package/backendの責務です。
 
+### REQ-ACTION-003: Accepted entry and environment binding
+
+action handlerはlogical node IDだけでなく、実際に表示されたenvironment variantとhostが最後に
+受理したentry revisionへ結び付けます。同じtimeline generation内で次entryが適用された場合も、
+旧`CustomState`のactionを新handlerへ配送してはいけません。intent実行成功後はAppleのinteractive
+widget contractに合わせてtimelineを再取得し、失敗時はreload成功へ丸めません。
+`CustomState`はprovider sessionとwidget instanceにも結び付け、別instanceまたはprocess再起動前の
+tokenを受理してはいけません。host updateの結果が曖昧な場合に備え、外部へ提示したrevisionは
+再利用せず、action tableはupdate成功後にだけ公開します。
+
 ## Concurrency and ownership
 
 ### REQ-CONCURRENCY-001: State isolation
@@ -278,6 +288,8 @@ Widget interactionはdiscrete host actionとして処理し、UIKit/AppKit respo
 | widget definition registry | immutable after startup |
 | provider lifecycle and ordered I/O | actor |
 | instance and timeline generation | actor |
+| accepted action table and in-flight logical actions | host actor |
+| intent completion | task monitored outside the ordered provider-event drain |
 | short in-memory template cache | `Mutex<State>` |
 | View evaluation | `MainActor` |
 | COM callback object | C++ callback scope only |
@@ -288,6 +300,7 @@ I/O、`await`、external callback、host updateを`Mutex.withLock`内で実行�
 
 runtimeは明示的なshutdown pathを持ち、timeline taskをcancelし、event streamがあればfinishし、
 host callbackの受付を停止し、C++ server lifetimeをexactly onceで解放しなければなりません。
+任意長のintent completionはdelete、context change、shutdown eventの処理を停止してはいけません。
 
 ### REQ-OWNERSHIP-001: Payload buffers
 
@@ -318,6 +331,15 @@ SwiftからC++へ渡すJSON/resource bufferはowner、byte count、lifetime、de
 
 diagnosticはwidget kind、instance ID、generation、operation、typed causeを関連付けます。
 secret、認証token、個人情報、完全なuser data payloadを記録してはいけません。
+任意の`Error`のdescription、reflectionされた型名、bridgeが所有する自由形式messageを
+default diagnosticへ出力してはいけません。公開APIがnonthrowingでruntime controlを利用できない場合も、
+失敗をsilent no-opにせず、独立した有界diagnostic channelへ記録します。
+
+### REQ-DIAGNOSTIC-002: Bounded callback ingress
+
+Windows callback ingressは固定容量FIFOとして実装し、`removeFirst`による反復copyと無制限growthを
+許可しません。容量超過時は新しい通常eventの受付を停止し、typed overflow diagnosticを一度だけ記録し、
+既存eventの後にterminal shutdownを必ず配送してnative shutdownを要求します。
 
 ## Performance
 

@@ -10,6 +10,10 @@ COM activationとWidgets Board runtime検証は未実行です。確認済み事
 目標設計、必要な変更、未解決事項を
 区別して記載します。
 
+M7の`AppIntent`付き`Button`から`OnActionInvoked`、intent実行、timeline再取得までのsource pathは
+実装済みです。97件のNative test、Apple/replacement共有fixture、通常WASMのAPI/compiler targetは
+検証済みです。WindowsでのM7 compile/runtimeと実Widgets Boardのinteraction acceptanceは未検証です。
+
 timeline validation、provider callback owner、registry、schedulerは`OpenWidgetRuntime`がhost非依存値として
 所有します。`WidgetKit`は公開`Timeline`とconfigurationを内部値へloweringし、runtimeが公開WidgetKit型へ
 依存する逆流はありません。Windows host adapterはgeneration fenceを実装してこのruntimeを消費します。
@@ -58,7 +62,7 @@ timeline validation、provider callback owner、registry、schedulerは`OpenWidg
 ## Required invariants
 
 1. Widget sourceのimportと宣言はApple/Windowsで同一にする。
-2. package identityと公開module identityを分け、moduleは`SwiftUI`/`WidgetKit`とする。
+2. package identityと公開module identityを分け、moduleは`AppIntents`/`SwiftUI`/`WidgetKit`とする。
 3. Apple buildではsystem frameworkを使い、package replacementをlinkしない。
 4. Windows/Webはplatformとして選び、Package Traitやmacroで偽装しない。
 5. View DSL、host-neutral runtime、Windows adapterを分離する。
@@ -69,6 +73,8 @@ timeline validation、provider callback owner、registry、schedulerは`OpenWidg
 10. WindowsのFoundation値型を再定義せず、OpenCoreGraphicsと同じ型identityを共有する。
 11. EmbeddedではFoundation familyをimport/linkせず、size効果を最終binaryで検証する。
 12. shipping full Swift buildではtoolchain組み込みFoundationを使用し、swift-foundation package版を混在させない。
+13. accepted action tokenはprovider session、widget instance、generation、entry revisionへ結び付け、
+    外部updateを試行したrevisionを別のtokenへ再利用しない。
 
 ## Ideal architecture
 
@@ -77,6 +83,7 @@ flowchart LR
     Source["Shared widget source"]
 
     subgraph Public["Public compatibility modules"]
+        AppIntents["AppIntents"]
         SwiftUI["SwiftUI"]
         WidgetKit["WidgetKit"]
     end
@@ -97,6 +104,8 @@ flowchart LR
 
     Source --> SwiftUI
     Source --> WidgetKit
+    Source --> AppIntents
+    SwiftUI --> AppIntents
     WidgetKit --> SwiftUI
     SwiftUI --> Foundation
     WidgetKit --> Foundation
@@ -144,19 +153,20 @@ would occupy MainActor while the COM server blocks and prevent later timeline
 View evaluation. This is the narrow documented API difference; the consumer's
 `@main` widget declaration is unchanged.
 
-## Why one package with two public products
+## Why one package with three public products
 
 初期設計ではOpenSwiftUIとOpenWidgetKitを別packageにする案も考えられます。しかし、
 Appleのmodule境界では`Widget`がSwiftUI、具象configurationがWidgetKitにあり、両方が
-同一の隠れたconfiguration/runtime contractを共有します。
+同一の隠れたconfiguration/runtime contractを共有します。interactive `Button`はさらに
+AppIntentsのcontractを消費するため、三つの公開moduleを同じversioned packageで管理します。
 
 | Distribution | Benefit | Cost |
 |---|---|---|
-| one package, two products | `package` access、atomic version、循環依存なし | release単位が共通 |
-| two packages plus runtime package | release責務を分離できる | 三packageのversion lock、公開SPIが必要 |
-| two packages with duplicated runtime | 独立して見える | contract drift、ownership重複、採用しない |
+| one package, three products | `package` access、atomic version、循環依存なし | release単位が共通 |
+| three public packages plus runtime package | release責務を分離できる | 四packageのversion lock、公開SPIが必要 |
+| separately packaged products with duplicated runtime | 独立して見える | contract drift、ownership重複、採用しない |
 
-最初のproduction implementationはone package/two productsを採用します。将来、一般用途の
+最初のproduction implementationはone package/three productsを採用します。将来、一般用途の
 完全なOpenSwiftUIが成立した場合にだけ、安定した内部runtime protocolをversioned productへ
 切り出すことを再検討します。
 
@@ -340,27 +350,31 @@ sequenceDiagram
 
 ## Shared-state and ownership review matrix
 
-M2/M3のshared sourceにはEmbedded分岐、raw-state fallback、no-op lockはありません。Windows列は同じ
-source contractを示します。M2/M3のWindows compile gateはx64/ARM64で通過し、runtime behaviorは未実行です。
+OpenWidgetKitのshared sourceにはEmbedded分岐、raw-state fallback、no-op lockはありません。Windows列は
+同じsource contractを示します。M2-M5のWindows compile gateはx64/ARM64で通過し、M7は未compile、
+runtime behaviorは未実行です。
 
 | Logical state | Native storage/isolation | normal WASM | Windows contract | Read/mutation entry | Shutdown/release |
 |---|---|---|---|---|---|
 | runtime instances, activity, and lifetime generations | `WidgetRuntimeService` actor with generation tombstones | same actor | same actor; x64/ARM64 compiled, runtime pending | actor methods only | deactivation cancels scheduled work; deletion retains the last generation; shutdown removes instances |
 | provider request terminal state | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; x64/ARM64 compiled, runtime pending | `claimProviderCallback` and exactly-once `complete` | timeout task cancelled and continuation resumed once |
 | provider callback value handoff | `Mutex<Payload>` one-shot owner | same owner | same owner; x64/ARM64 compiled, runtime pending | callback installs, MainActor consumes once | payload cleared on take; late/duplicate callback rejected |
-| runtime composition | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; x64/ARM64 compiled, runtime pending | install/current/uninstall composition functions | uninstall clears both references |
+| runtime composition and diagnostic hub | `Mutex<State>` | same `Mutex<State>` | same `Mutex<State>`; changed Windows path is unverified | install/current/report/uninstall functions; one ordered drainer invokes the sink outside the lock | control teardown preserves the bootstrap sink long enough to report terminal failure; full uninstall clears references and bounded pending diagnostics |
 | view identity map | `WidgetIdentityStore` on `MainActor` | same isolation | same isolation; x64/ARM64 compiled, runtime pending | one transaction spans every entry and environment variant in a requested timeline | unused identities are pruned only after complete success; any failed nested evaluation rolls back; remaining state is released with the widget instance |
 | semantic document/resources | immutable `Sendable` values | same values | same values; x64/ARM64 compiled, runtime pending | constructed on `MainActor`, read by runtime/host | value lifetime; no external handle |
 | host generation fence | test host uses actor state | protocol contract only | `WindowsAdaptiveCardHost` actor plus C++ operation fence; x64/ARM64 built, runtime pending | invalidate/apply/remove | removal rejects updates through its generation; a later lifetime requires a strictly newer generation and a complete template |
+| accepted action table | `WindowsAdaptiveCardHost` actor; focused Native behavior tests pass | host target not selected | same actor contract; Windows compile/runtime pending | committed only after bridge update success; begin by exact verb/decoded payload/session/instance/revision state | cleared on invalidation/removal; handler retained through the accepted entry revision |
+| action execution | eager `Task` owner returned after actor-isolated validation/reservation; Native lifecycle/owner tests pass | host target not selected | same execution contract; Windows compile/runtime pending | controller monitors completion outside the ordered event drain; completion weakly re-enters host/service actors | execution does not retain provider lifetime owners; stale or released-owner completion cannot reload |
 
-M4/M5で追加したstateはWindows adapter graphへ限定されます。Embedded SwiftはOpenWidgetKitの対応targetでは
+M4/M5/M7で追加したstateはWindows adapter graphへ限定されます。Embedded SwiftはOpenWidgetKitの対応targetでは
 なく、Windows stateをraw storageへ置換する条件分岐もありません。
 
-| M4/M5 logical state | Native test storage/isolation | normal WASM | Embedded WASM | Windows storage/isolation | Read/mutation/release |
+| M4/M5/M7 logical state | Native test storage/isolation | normal WASM | Embedded WASM | Windows storage/isolation | Read/mutation/release |
 |---|---|---|---|---|---|
-| template cache | `Mutex<CacheState>` | target not selected | unsupported target | same `Mutex<CacheState>` | compiler methods; bounded eviction; compiler lifetime |
-| callback event queue | `Mutex<State>` in focused tests | target not selected | unsupported target | same `Mutex<State>` | enqueue/drain; external actor callback outside lock |
+| template cache | `Mutex<CacheState>`; Native behavior tests pass | same storage; normal WASM target builds | unsupported target | same `Mutex<CacheState>` | compiler methods; bounded eviction; compiler lifetime |
+| callback event queue | fixed-capacity ring in `Mutex<State>`; Native overflow/shutdown test passes | target not selected | unsupported target | same ring contract; Windows verification pending | O(1) enqueue/dequeue; overflow rejects later normal events, emits one typed diagnostic, retains terminal shutdown, and invokes native shutdown outside the lock |
 | provider controller | actor | target not selected | unsupported target | same actor | ordered active/inactive lifecycle; retryable service shutdown then exactly-once accepted bridge completion |
+| action completion monitor | actor-inherited task after ordered validation/reservation | target not selected | unsupported target | same task/actor contract | does not block event drain; reports every failure; reloads only an accepted current generation |
 | Swift host fence | actor dictionary | target not selected | unsupported target | same actor dictionary | invalidate/apply/remove; bridge I/O actor-ordered |
 | C ABI handle | immutable opaque owner with documented unchecked boundary | target stub rejects use | unsupported target | same owner over C++ state | exactly-once `owk_bridge_close` in deinit |
 | C++ generations/operations | not linked | not linked | not linked | mutex-protected fence plus one operation thread | the class factory follows the Widget Provider `no_module_lock` contract while created provider objects use the custom process lock; recovery is queued before the COM class object is resumed; validation runs before queue and before/after `UpdateWidget`; deletion never blocks a reentrant callback; the payload-free shutdown callback allocates no owner; destructor joins |
@@ -476,13 +490,34 @@ CFCG値identityはOpenFoundation、graphics operationとrenderingはOpenCoreGrap
 `FoundationEssentials`は公開moduleへ直接使用せず、swift-foundationをpackage dependencyとして
 追加しません。
 
+### ADR-007: A bounded AppIntents module owns widget interaction
+
+Appleのinteractive Widgetはarbitrary closureではなく`AppIntent`付き`Button`を正規経路とするため、
+公開`AppIntents` productを同じpackageに置きます。最初のsubsetは`PersistentlyIdentifiable`、
+`AppIntent`、no-value `IntentResult`、`Button(intent:)`に限定し、parameter wrapper、entity、discovery、donation、
+foreground/open-app executionは宣言しません。handlerの具象intent valueは`WidgetDocument`が保持し、
+rendererはstable logical IDとenvironment-qualified verbだけを扱います。
+Action handlerは比較不能な実行値をcaptureするため、action-bearing `WidgetDocument`、timeline、update、
+compiled payloadをID/typeだけで`Equatable`に見せません。templateの構造等価性はcompilerが生成する
+明示的なstructure identityだけが所有します。
+`LocalizedStringResource`はSwiftUI lowering時に文字列化せず`WidgetText`が保持し、選択された
+renderer/text resolverだけが最終表示値へ解決します。Windows action stateはprocess内revisionだけを
+identityにせず、provider sessionとwidget instanceを含むopaque tokenでprocess再起動とinstance間の
+replayを拒否します。bridge結果が失敗でもhost受理後の失敗である可能性があるため、外部へ提示した
+revisionは消費済みとし、accepted action table自体は成功後にだけ置き換えます。
+event queueはactionの検証とin-flight予約までを順序どおりに完了した後、intentを独立した
+`WindowsWidgetActionExecution`として監視します。任意長のintent実行はdelete、context change、shutdownの
+drainを停止せず、完了時のgeneration/custom-state再検査に成功した場合だけtimeline reloadへ進みます。
+execution completionはhost/serviceを弱参照し、終了しないintentがprovider bridgeの解放責任を
+所有し続けないようにします。
+
 ## Required changes from current workspace
 
 | Area | Required work |
 |---|---|
-| package | 公開`SwiftUI`/`WidgetKit` productと内部runtime target |
+| package | 公開`AppIntents`/`SwiftUI`/`WidgetKit` productと内部runtime target |
 | foundation | OpenFoundation再公開、toolchain Foundation type identity、Embedded非link、geometry/source fixture、runtime配布検証 |
-| SwiftUI | Widget向けView DSLとWidget protocol surface |
+| SwiftUI | Widget向けView DSL、Widget protocol、AppIntent付きButton surface |
 | WidgetKit | Static configuration、timeline、reload surface |
 | runtime | registry、type erasure、scheduler、document、errors、shutdown |
 | compiler | Adaptive Cards template/data deterministic compiler |
@@ -497,10 +532,11 @@ CFCG値identityはOpenFoundation、graphics operationとrenderingはOpenCoreGrap
 1. manifestが現在要求するWindows 11 `10.0.22000.0`を実機で最小対応versionとして受け入れられるか;
 2. image resourceのhost取得方式とcache lifetime;
 3. localization bundleとWindows package resourceの対応;
-4. App Intents互換を別moduleにするか;
+4. App Intent parameter property wrapperと永続化serializationをどのmilestoneで追加するか;
 5. package名/module名に関する商標・配布上の確認;
 6. 既存OpenSwiftUI projectからAPI fixtureまたは実装を取り込む範囲とlicense review;
 7. Embedded Widgetで使用するCFCG値surfaceのAPI/ABI互換fixture。
+8. 公開配布前に採用するOpenWidgetKitのdistribution license（現在は`LICENSE`未設定）。
 
 未解決事項が公開API、所有権、host lifetimeを変える場合、その事項を解消するまで該当実装を
 開始しません。

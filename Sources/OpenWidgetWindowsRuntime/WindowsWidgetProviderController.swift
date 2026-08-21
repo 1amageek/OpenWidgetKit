@@ -25,7 +25,8 @@ package actor WindowsWidgetProviderController {
     private let configuration: OpenWidgetProviderConfiguration
     private let service: WidgetRuntimeService
     private let bridge: any WindowsWidgetBridge
-    private let diagnostics: @Sendable (WindowsWidgetBridgeDiagnostic) -> Void
+    private let actionHost: any WindowsWidgetActionHost
+    private let diagnostics: @Sendable (WindowsWidgetDiagnostic) -> Void
     private var shutdownState = ShutdownState.running
     private var shutdownOperation: ShutdownOperation?
 
@@ -33,11 +34,13 @@ package actor WindowsWidgetProviderController {
         configuration: OpenWidgetProviderConfiguration,
         service: WidgetRuntimeService,
         bridge: any WindowsWidgetBridge,
-        diagnostics: @escaping @Sendable (WindowsWidgetBridgeDiagnostic) -> Void
+        actionHost: any WindowsWidgetActionHost,
+        diagnostics: @escaping @Sendable (WindowsWidgetDiagnostic) -> Void
     ) {
         self.configuration = configuration
         self.service = service
         self.bridge = bridge
+        self.actionHost = actionHost
         self.diagnostics = diagnostics
     }
 
@@ -98,43 +101,104 @@ package actor WindowsWidgetProviderController {
                     throw WindowsWidgetHostError.unknownInstance(instanceID)
                 }
                 await service.deleteInstance(id: instanceID)
-            // FIXME(INCOMPLETE_IMPLEMENTATION): The production WinRT
-            // OnActionInvoked path currently terminates with a typed unsupported
-            // failure. M7 is complete only when validated action identities,
-            // payloads, handlers, stale-generation rejection, and reload behavior
-            // are implemented and exercised in the real Widgets Board.
-            case .actionInvoked(_, let verb, _, _):
-                throw WindowsWidgetHostError.unsupportedAction(verb)
+            case .actionInvoked(
+                let instanceID,
+                let verb,
+                let data,
+                let customState
+            ):
+                let execution = try await actionHost.beginAction(
+                    instanceID: instanceID,
+                    verb: verb,
+                    data: data,
+                    customState: customState
+                )
+                monitor(
+                    execution,
+                    event: event,
+                    instanceID: instanceID
+                )
             case .shutdownRequested:
                 try await completeShutdown()
             }
         } catch {
-            let instanceID = event.instanceID
-            let runtimeInfo: RuntimeWidgetInfo? = if let instanceID {
-                await service.currentConfigurations().first {
-                    $0.instanceID == instanceID
-                }
-            } else {
-                nil
-            }
-            let generation: UInt64? = if let instanceID {
-                await service.currentGeneration(for: instanceID)
-            } else {
-                nil
-            }
-            diagnostics(
-                WindowsWidgetBridgeDiagnostic(
-                    code: -2,
-                    message: [
-                        "operation=\(event.operationName)",
-                        "kind=\(event.widgetKind ?? runtimeInfo?.kind ?? "-")",
-                        "instance=\(instanceID ?? "-")",
-                        "generation=\(generation.map { String($0) } ?? "-")",
-                        "cause=\(String(reflecting: type(of: error))): \(error)"
-                    ].joined(separator: " ")
-                )
+            await Self.report(
+                error,
+                for: event,
+                service: service,
+                diagnostics: diagnostics
             )
         }
+    }
+
+    private func monitor(
+        _ execution: WindowsWidgetActionExecution,
+        event: WindowsWidgetProviderEvent,
+        instanceID: String
+    ) {
+        let service = self.service
+        let diagnostics = self.diagnostics
+        Task { [weak self, weak service, diagnostics] in
+            do {
+                let generation = try await execution.value()
+                guard let self else {
+                    throw WindowsWidgetHostError.shuttingDown
+                }
+                try await self.reloadAfterAction(
+                    instanceID: instanceID,
+                    generation: generation
+                )
+            } catch {
+                await Self.report(
+                    error,
+                    for: event,
+                    service: service,
+                    diagnostics: diagnostics
+                )
+            }
+        }
+    }
+
+    private func reloadAfterAction(
+        instanceID: String,
+        generation: UInt64
+    ) async throws {
+        guard shutdownState == .running else {
+            throw WindowsWidgetHostError.shuttingDown
+        }
+        try await service.reload(
+            instanceID: instanceID,
+            expectedGeneration: generation
+        )
+    }
+
+    private static func report(
+        _ error: any Error,
+        for event: WindowsWidgetProviderEvent,
+        service: WidgetRuntimeService?,
+        diagnostics: @Sendable (WindowsWidgetDiagnostic) -> Void
+    ) async {
+        let instanceID = event.instanceID
+        let runtimeInfo: RuntimeWidgetInfo? = if let instanceID, let service {
+            await service.currentConfigurations().first {
+                $0.instanceID == instanceID
+            }
+        } else {
+            nil
+        }
+        let generation: UInt64? = if let instanceID, let service {
+            await service.currentGeneration(for: instanceID)
+        } else {
+            nil
+        }
+        diagnostics(
+            .providerEventFailure(
+                event: event,
+                kind: runtimeInfo?.kind,
+                generation: generation,
+                error: error
+            )
+        )
     }
 
     package func completeShutdown() async throws {

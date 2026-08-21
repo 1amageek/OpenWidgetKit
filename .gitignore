@@ -3,4 +3,5 @@
 Package.resolved
 DerivedData/
 *.xcresult
+.test-artifacts/
 .DS_Store

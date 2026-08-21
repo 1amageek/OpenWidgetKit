@@ -16,7 +16,8 @@
 | runtime behavior | host-neutral M3 implemented | provider ownership, validation, three reload policies, generation fences, cancellation, and shutdown |
 | Adaptive Cards compiler | M4 host-neutral implementation verified on Native and normal WASM | canonical encoder, structural identity/cache, theme/family templates, resources, mappings, typed failures, 12 Native tests, and the normal WASM target build |
 | Windows provider | M5 source and x64/ARM64 build/package gate verified; runtime pending M6 | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, native-architecture packaging workflow, 13 Native host/manifest/controller tests, and expanded MSIX evidence |
-| build/test/runtime verification | Native, normal WASM, Windows M1, and Windows M5 build/package gates pass | all 75 focused Native tests pass, the Windows runtime target passes three consecutive warm runs, pinned normal WASM targets build, M1 x64 behavior passes, and M5 x64/ARM64 compile/link/package gates pass; COM activation and real Widgets Board runtime remain unexecuted |
+| interaction | M7 host-neutral behavior and API surface verified; Windows pending | bounded AppIntents product, deferred localized-resource resolution, stable logical/environment action bindings, session/instance/accepted-entry fences, nonblocking intent monitoring, typed failures, success-triggered reload, Native behavior tests, Apple/replacement fixtures, and normal WASM target builds |
+| build/test/runtime verification | Native, normal WASM, Windows M1, and Windows M5 build/package gates pass | all 97 focused Native tests pass, pinned Apple/replacement API verification passes, normal WASM API/compiler builds and behavior fixtures pass, M1 x64 behavior passes, and the recorded M5 x64/ARM64 compile/link/package gates pass; the revised Windows workflow, COM activation, and real Widgets Board runtime remain unexecuted |
 
 The 2026-08-20 architectural review corrected inactive lifecycle handling,
 delete/recreate generation continuity, template reset across instance lifetimes,
@@ -30,10 +31,13 @@ binding-plan-driven data-only template-cache hits with overflow-free bounded LRU
 single-source resource URI derivation, and
 the packaged-COM namespace declaration. Fifteen focused regression test
 declarations were added, and the host-fence and manifest tests were
-strengthened. All 75 Native tests and the affected normal WASM targets pass.
-The native Windows x64/ARM64 gates compile the full Swift test graph, build the
-provider executable and C++/WinRT bridge, prove the official runtime dependency
-closure, and inspect the expanded unsigned MSIX.
+strengthened. All 97 Native tests and the affected normal WASM targets pass.
+The recorded native Windows x64/ARM64 gates compile the full Swift test graph,
+build the provider executable and C++/WinRT bridge, prove the official runtime
+dependency closure, and inspect the expanded unsigned MSIX. The revised
+push/pull-request workflow also executes the compiled test runner with a
+ten-minute timeout and resolves OpenFoundation from its pinned remote revision;
+that revised path has not run yet.
 
 Import-only success, declaration presence, or Package.swift resolution is not implementation evidence.
 
@@ -50,22 +54,35 @@ Widget / WidgetBundle
                             -> Swift host actor and C ABI generation fence
                                 -> C++/WinRT IWidgetProvider
                                     -> WidgetManager.UpdateWidget
+
+AppIntent-backed Button
+    -> WidgetAction in the semantic document
+        -> environment-qualified Action.Execute
+            -> owned OnActionInvoked event
+                -> accepted generation/revision action table
+                    -> AppIntent.perform()
+                        -> next timeline generation
 ```
 
-The current 75 focused Native test declarations cover the initial timeline values plus semantic
+The 97 focused Native tests cover the initial timeline values plus semantic
 lowering, stable identities, resource ownership, invalid values, provider
 completion ownership, timeout/duplicate/late completion, all three scheduler
 policies, non-advancing reload rejection, registry failures, bootstrap routing,
 WidgetCenter routing, generation invalidation, delete during a suspended host
 apply, shutdown, canonical Adaptive Cards success/failure payloads, template
-cache behavior, host generation fences, and deterministic manifest generation.
-The M2/M3 shared source fixture typechecks against the
-pinned Apple SDKs and the replacement, and the replacement fixture builds for
-normal WASM with the pinned Swift 6.4 snapshot. The M4 target also builds for
-normal WASM. The x86_64 Windows M1 gate executes its behavior fixture and verifies
-Foundation module/runtime identity. The M5 gate compiles M2-M5 test targets and
-builds/links/packages the provider on native x64 and ARM64 runners. It does not
-execute the Windows host lifecycle or Widgets Board behavior.
+cache behavior, host generation fences, deterministic manifest generation,
+bounded callback overflow, interaction replay fences, nonblocking action
+execution, owner release, typed diagnostics, and success-only timeline reload.
+The M2/M3/M7 shared source fixtures typecheck against the pinned Apple SDKs and
+the replacement. The replacement API fixture, behavior fixture, and M4 compiler
+target build for normal WASM with the pinned Swift 6.4 snapshot and the published
+OpenFoundation localized-value supplement. The x86_64 Windows M1 gate
+executes its behavior fixture and verifies Foundation module/runtime identity.
+The recorded M5 gate compiles M2-M5 test
+targets and builds, links, and packages the provider on native x64 and ARM64
+runners. It does not execute the Windows host lifecycle or Widgets Board
+behavior. The revised workflow is intended to execute the compiled package
+tests, but remains pending its first run.
 
 ## Milestone dependency graph
 
@@ -78,7 +95,7 @@ flowchart LR
     M4["M4 Adaptive Cards compiler<br/>Native tests + normal WASM build pass"]
     M5["M5 WinRT bridge and MSIX<br/>x64/ARM64 build/package gate passes"]
     M6["M6 Real Board static E2E<br/>1-2 weeks"]
-    M7["M7 Interaction<br/>2-4 weeks"]
+    M7["M7 Interaction<br/>Native/API/WASM verified; Windows pending"]
 
     M0 --> M1
     M1 --> M2
@@ -89,7 +106,8 @@ flowchart LR
     M4 --> M6
     M5 --> M6
     M6 -->|source, semantic, or host mismatch| M1
-    M6 -->|all static acceptance criteria pass| M7
+    M5 --> M7
+    M6 -->|real host evidence| M7
 ```
 
 Estimates are planning ranges for one experienced engineer, not completion claims. The critical path is
@@ -148,7 +166,7 @@ Required work:
 - [x] Add one shared Apple/replacement compile fixture using `Date`, `CGFloat`, `CGPoint`, `CGSize`, and `CGRect`
 - [x] Verify non-Embedded OpenCoreGraphics values cross the OpenWidgetKit API without conversion on macOS and normal WASM
 - [x] Verify the intended Foundation re-export and public-import surface on Native, normal WASM, and pinned x86_64 Windows
-- [x] Add a dispatch-only Windows workflow pinned to the Swift installer SHA-256, action commits, and sibling-package commits
+- [ ] Run the automatic push/PR Windows workflow that executes the compiled test runner and resolves the pinned remote OpenFoundation revision; workflow source is implemented but its first run is pending
 - [x] Run `scripts/verify-m1-windows.ps1` on the pinned x86_64 Windows toolchain and record installed Foundation artifact hashes
 
 ## M2: Widget-scoped SwiftUI and semantic document
@@ -202,11 +220,14 @@ unadvertised until a later milestone defines their semantics.
 - [x] Compile the M3 source and test graph on the pinned x64 and ARM64 Windows toolchains
 - [ ] Execute the M3 behavior tests on Windows
 
-Windows `Widget.main()` now installs the M5 bootstrap before lowering reaches the
+Windows `Widget.main()` installs the M5 bootstrap before lowering reaches the
 runtime composition. Other platforms without an injected host still fail with
-`hostUnavailable` instead of reporting placeholder success. Action compilation
-and routing remain M7; an M5 `OnActionInvoked` callback is observed and reported
-as a typed unsupported action rather than ignored.
+`hostUnavailable` instead of reporting placeholder success. M7 now routes the
+owned `OnActionInvoked` value through the accepted entry-revision action table;
+provider-session and instance-scoped state prevents cross-lifetime replay,
+logical action identity fences environment variants together, attempted revisions
+are never reused, suspended intent completion does not block lifecycle event draining,
+and unknown, malformed, duplicate, and stale actions fail explicitly.
 
 ## M4: Adaptive Cards compiler
 
@@ -270,14 +291,14 @@ as a typed unsupported action rather than ignored.
 
 ## M7: Interaction
 
-- [ ] Define supported SwiftUI interaction surface
-- [ ] Stable action identity and payload
-- [ ] `Action.Execute` compilation
-- [ ] `OnActionInvoked` routing
-- [ ] Unknown, duplicate, stale action failures
-- [ ] Action-triggered timeline invalidation
-- [ ] Callback reentrancy tests
-- [ ] Decide App Intents compatibility boundary
+- [x] Define the supported SwiftUI interaction surface and verify the shared Apple/replacement fixture
+- [x] Verify stable action identity, environment verbs, provider-session/instance-scoped accepted-entry revisions, and non-reused attempted revisions on Native
+- [x] Verify `ActionSet`/`Action.Execute` compilation and canonical bindings on Native and build the compiler for normal WASM
+- [ ] Execute owned `OnActionInvoked` routing in the real Windows host; ordered validation/reservation and nonblocking completion are verified on Native
+- [x] Verify typed unknown, duplicate, malformed, and stale action failures on Native
+- [x] Verify success-only expected-generation timeline invalidation on Native
+- [x] Verify logical-action duplicate, generation-change, instance/session scope, bridge-failure, nonblocking delete/shutdown, and non-retaining suspended execution
+- [x] Record the bounded App Intents compatibility boundary in ADR-007 and verify its shared fixture
 
 ## Future milestones
 
@@ -285,7 +306,7 @@ as a typed unsupported action rather than ignored.
 - accessibility and localization conformance;
 - image rasterization through OpenCoreGraphics after Windows verification;
 - provider customization;
-- App Intents-compatible interaction;
+- App Intent parameters, entities, discovery, donation, and foreground execution;
 - Web/WASI host adapter;
 - remote HTML Widget backend;
 - diagnostics and developer preview tooling.

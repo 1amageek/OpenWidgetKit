@@ -18,11 +18,11 @@ package final class DynamicWindowsWidgetBridge: WindowsWidgetBridge, Sendable {
 
     fileprivate final class CallbackOwner: Sendable {
         let eventSink: @Sendable (WindowsWidgetProviderEvent) -> Void
-        let diagnosticSink: @Sendable (WindowsWidgetBridgeDiagnostic) -> Void
+        let diagnosticSink: @Sendable (WindowsWidgetDiagnostic) -> Void
 
         init(
             eventSink: @escaping @Sendable (WindowsWidgetProviderEvent) -> Void,
-            diagnosticSink: @escaping @Sendable (WindowsWidgetBridgeDiagnostic) -> Void
+            diagnosticSink: @escaping @Sendable (WindowsWidgetDiagnostic) -> Void
         ) {
             self.eventSink = eventSink
             self.diagnosticSink = diagnosticSink
@@ -36,7 +36,7 @@ package final class DynamicWindowsWidgetBridge: WindowsWidgetBridge, Sendable {
         libraryPath: String,
         classID: String,
         eventSink: @escaping @Sendable (WindowsWidgetProviderEvent) -> Void,
-        diagnosticSink: @escaping @Sendable (WindowsWidgetBridgeDiagnostic) -> Void
+        diagnosticSink: @escaping @Sendable (WindowsWidgetDiagnostic) -> Void
     ) throws {
         let callbackOwner = CallbackOwner(
             eventSink: eventSink,
@@ -256,17 +256,17 @@ private func openWidgetEventCallback(
         case 8:
             value = .shutdownRequested
         default:
-            throw WindowsWidgetHostError.hostRejected(
-                code: Int32(event.kind),
-                message: "The bridge emitted an unknown event kind."
+            owner.diagnosticSink(
+                .unknownBridgeEventKind(Int32(event.kind))
             )
+            return
         }
         owner.eventSink(value)
     } catch {
         owner.diagnosticSink(
-            WindowsWidgetBridgeDiagnostic(
-                code: -1,
-                message: String(describing: error)
+            .bridgeEventFailure(
+                eventKind: Int32(event.kind),
+                error: error
             )
         )
     }
@@ -282,21 +282,7 @@ private func openWidgetDiagnosticCallback(
     let owner = Unmanaged<DynamicWindowsWidgetBridge.CallbackOwner>
         .fromOpaque(context)
         .takeUnretainedValue()
-    do {
-        owner.diagnosticSink(
-            WindowsWidgetBridgeDiagnostic(
-                code: code,
-                message: try decodeBridgeString(message.bytes)
-            )
-        )
-    } catch {
-        owner.diagnosticSink(
-            WindowsWidgetBridgeDiagnostic(
-                code: code,
-                message: "The bridge diagnostic was not valid UTF-8."
-            )
-        )
-    }
+    owner.diagnosticSink(.bridgeStatus(code))
 }
 
 private func decodeBridgeString(_ bytes: OWKByteSlice) throws -> String {
@@ -317,9 +303,6 @@ private func runtimeFamily(_ rawValue: Int32) throws -> RuntimeWidgetFamily {
     case 2: .systemMedium
     case 3: .systemLarge
     default:
-        throw WindowsWidgetHostError.hostRejected(
-            code: rawValue,
-            message: "The bridge emitted an unsupported widget size."
-        )
+        throw WindowsWidgetHostError.unsupportedBridgeWidgetSize(rawValue)
     }
 }

@@ -4,17 +4,20 @@ package struct WidgetViewGraphContext {
     package var environment: WidgetEnvironmentSnapshot
     package let identityStore: WidgetIdentityStore
     package private(set) var resources: [WidgetResourceID: WidgetResource]
+    package private(set) var actions: [WidgetActionID: WidgetAction]
 
     package init(
         path: WidgetNodeID = WidgetNodeID(),
         environment: WidgetEnvironmentSnapshot = WidgetEnvironmentSnapshot(),
         identityStore: WidgetIdentityStore,
-        resources: [WidgetResourceID: WidgetResource] = [:]
+        resources: [WidgetResourceID: WidgetResource] = [:],
+        actions: [WidgetActionID: WidgetAction] = [:]
     ) {
         self.path = path
         self.environment = environment
         self.identityStore = identityStore
         self.resources = resources
+        self.actions = actions
     }
 
     package mutating func withPath<Result>(
@@ -31,5 +34,12 @@ package struct WidgetViewGraphContext {
         let id = resource.id
         resources[id] = resource
         return id
+    }
+
+    package mutating func register(_ action: WidgetAction) throws {
+        guard actions[action.id] == nil else {
+            throw WidgetSemanticError.duplicateActionID(action.id.rawValue)
+        }
+        actions[action.id] = action
     }
 }

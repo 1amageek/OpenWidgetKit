@@ -1,3 +1,5 @@
+import AppIntents
+import OpenFoundation
 @testable import OpenWidgetRuntime
 @testable import SwiftUI
 import Testing
@@ -106,6 +108,65 @@ struct WidgetDocumentTests {
         #expect(labeledImage.resourceID == decorativeImage.resourceID)
         #expect(labeledImage.label != nil)
         #expect(decorativeImage.isDecorative)
+    }
+
+    @Test
+    func lowersIntentButtonWithStableActionIdentity() throws {
+        let first = try makeWidgetDocument(
+            Button("Run", intent: DocumentFixtureIntent())
+        )
+        let second = try makeWidgetDocument(
+            Button("Run again", intent: DocumentFixtureIntent())
+        )
+
+        #expect(first.actions.count == 1)
+        #expect(Set(first.actions.keys) == Set(second.actions.keys))
+        let node = try #require(first.root.children.first)
+        guard case .action(let descriptor) = node.kind else {
+            Issue.record("Expected an action node")
+            return
+        }
+        #expect(first.actions[descriptor.id]?.handlerIdentity ==
+            DocumentFixtureIntent.persistentIdentifier)
+    }
+
+    @Test
+    func retainsLocalizedStringResourceUntilRendering() throws {
+        let resource: LocalizedStringResource = "Localized action"
+        let document = try makeWidgetDocument(
+            Button(resource, intent: DocumentFixtureIntent())
+        )
+        let node = try #require(document.root.children.first)
+        guard case .action(let descriptor) = node.kind,
+              case .localizedResource(let storedResource) = descriptor.title.storage else {
+            Issue.record("Expected a localized-resource action title")
+            return
+        }
+
+        #expect(storedResource == resource)
+    }
+
+    @Test
+    func rejectsUnsupportedIntentModesAndButtonLabels() {
+        #expect(throws: WidgetSemanticError.self) {
+            try makeWidgetDocument(
+                Button(intent: OpensAppFixtureIntent()) {
+                    Text(verbatim: "Open")
+                }
+            )
+        }
+        #expect(throws: WidgetSemanticError.self) {
+            try makeWidgetDocument(
+                Button(intent: DocumentFixtureIntent()) {
+                    Image(systemName: "star")
+                }
+            )
+        }
+        #expect(throws: WidgetSemanticError.self) {
+            try makeWidgetDocument(
+                Button("Custom result", intent: CustomResultFixtureIntent())
+            )
+        }
     }
 
     @Test
@@ -357,6 +418,46 @@ private struct ItemList: View {
 
 private struct UnsupportedPrimitive: View {
     typealias Body = Never
+}
+
+@available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *)
+private struct DocumentFixtureIntent: AppIntent {
+    static let title: LocalizedStringResource = "Document fixture"
+    static let persistentIdentifier = "OpenWidgetKit.DocumentFixtureIntent"
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        .result()
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *)
+private struct OpensAppFixtureIntent: AppIntent {
+    static let title: LocalizedStringResource = "Open app fixture"
+    static let openAppWhenRun = true
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        .result()
+    }
+}
+
+@available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *)
+private struct CustomResultFixtureIntent: AppIntent {
+    static let title: LocalizedStringResource = "Custom result fixture"
+
+    init() {}
+
+    func perform() async throws -> CustomFixtureIntentResult {
+        CustomFixtureIntentResult()
+    }
+}
+
+@available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
+private struct CustomFixtureIntentResult: IntentResult {
+    var value: Never? { nil }
 }
 
 private enum FixtureEnvironmentKey: EnvironmentKey {

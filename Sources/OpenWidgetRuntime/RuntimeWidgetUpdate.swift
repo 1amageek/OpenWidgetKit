@@ -1,4 +1,4 @@
-package struct RuntimeWidgetUpdate: Equatable, Sendable {
+package struct RuntimeWidgetUpdate: Sendable {
     package let instanceID: String
     package let kind: String
     package let family: RuntimeWidgetFamily

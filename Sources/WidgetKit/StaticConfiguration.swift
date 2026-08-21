@@ -94,11 +94,7 @@ where Provider: TimelineProvider, Content: View {
                     guard let timeline = transfer.take(
                         as: Timeline<Provider.Entry>.self
                     ) else {
-                        request.fail(
-                            .hostRejected(
-                                message: "Provider timeline ownership was already consumed."
-                            )
-                        )
+                        request.fail(.providerTimelineOwnershipConsumed)
                         return
                     }
                     request.succeed(
@@ -114,9 +110,7 @@ where Provider: TimelineProvider, Content: View {
                 } catch let error as WidgetRuntimeError {
                     request.fail(error)
                 } catch {
-                    request.fail(
-                        .hostRejected(message: String(describing: error))
-                    )
+                    request.fail(.providerFailed)
                 }
             }
             provider.getTimeline(in: providerContext) { timeline in
@@ -143,9 +137,7 @@ where Provider: TimelineProvider, Content: View {
                     )
                 }
                 guard let document = documents.first else {
-                    throw WidgetRuntimeError.hostRejected(
-                        message: "A provider context must contain at least one environment variant."
-                    )
+                    throw WidgetRuntimeError.missingEnvironmentVariants
                 }
                 return RuntimeTimelineEntry(
                     date: entry.date,

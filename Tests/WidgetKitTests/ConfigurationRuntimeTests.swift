@@ -63,7 +63,11 @@ struct ConfigurationRuntimeTests {
         #expect(textValues(in: timeline.entries[0].document.root) == ["value-1"])
         #expect(
             diagnostics.values == [
-                .duplicateProviderCompletion(kind: "duplicate")
+                .duplicateProviderCompletion(
+                    kind: "duplicate",
+                    instanceID: nil,
+                    generation: nil
+                )
             ]
         )
     }
@@ -122,7 +126,11 @@ struct ConfigurationRuntimeTests {
         provider.complete(value: 9)
         try await waitUntil {
             diagnostics.values.contains(
-                .lateProviderCompletion(kind: "late")
+                .lateProviderCompletion(
+                    kind: "late",
+                    instanceID: nil,
+                    generation: nil
+                )
             )
         }
     }
@@ -183,6 +191,33 @@ struct ConfigurationRuntimeTests {
         #expect(WidgetCenter.UserInfoKey.kind == "WGWidgetUserInfoKeyKind")
         #expect(WidgetCenter.UserInfoKey.family == "WGWidgetUserInfoKeyFamily")
         #expect(WidgetCenter.UserInfoKey.activityID == "WGWidgetUserInfoKeyActivityID")
+    }
+
+    @Test
+    func widgetCenterBuffersTypedDiagnosticsUntilBootstrapInstallation() {
+        WidgetRuntimeComposition.uninstall()
+        for index in 0..<70 {
+            WidgetCenter.shared.reloadTimelines(ofKind: "kind-\(index)")
+        }
+        let diagnostics = DiagnosticRecorder()
+        let bootstrap = RecordingBootstrap(
+            diagnosticSink: diagnostics.record
+        )
+        WidgetRuntimeComposition.installBootstrap(bootstrap)
+        defer { WidgetRuntimeComposition.uninstall() }
+
+        #expect(diagnostics.values.count == 65)
+        #expect(
+            diagnostics.values.first == .controlUnavailable(
+                operation: .reloadTimelines,
+                kind: "kind-0"
+            )
+        )
+        #expect(
+            diagnostics.values.last == .diagnosticBufferOverflow(
+                droppedCount: 6
+            )
+        )
     }
 
     private func makeDefinition<Provider>(
@@ -439,6 +474,13 @@ private final class RecordingControl: WidgetRuntimeControl, Sendable {
 @MainActor
 private final class RecordingBootstrap: WidgetRuntimeBootstrap, Sendable {
     private(set) var kinds: [String] = []
+    let diagnosticSink: WidgetRuntimeDiagnosticSink
+
+    init(
+        diagnosticSink: @escaping WidgetRuntimeDiagnosticSink = { _ in }
+    ) {
+        self.diagnosticSink = diagnosticSink
+    }
 
     func run(registry: RuntimeWidgetRegistry) async {
         kinds = registry.definitions.map(\.kind)

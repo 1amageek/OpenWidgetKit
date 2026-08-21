@@ -13,12 +13,17 @@ struct WindowsWidgetProviderControllerTests {
             definitions: [makeControllerDefinition(source: source)]
         )
         let host = ControllerHost()
-        let service = WidgetRuntimeService(registry: registry, host: host)
+        let service = WidgetRuntimeService(
+            registry: registry,
+            host: host,
+            diagnostics: { _ in }
+        )
         let bridge = ControllerBridge()
         let controller = WindowsWidgetProviderController(
             configuration: controllerConfiguration(),
             service: service,
             bridge: bridge,
+            actionHost: ControllerActionHost(),
             diagnostics: { _ in }
         )
 
@@ -63,13 +68,15 @@ struct WindowsWidgetProviderControllerTests {
         )
         let service = WidgetRuntimeService(
             registry: registry,
-            host: ControllerHost()
+            host: ControllerHost(),
+            diagnostics: { _ in }
         )
         let bridge = ControllerBridge(failFirstShutdownCompletion: true)
         let controller = WindowsWidgetProviderController(
             configuration: controllerConfiguration(),
             service: service,
             bridge: bridge,
+            actionHost: ControllerActionHost(),
             diagnostics: { _ in }
         )
 
@@ -89,7 +96,11 @@ struct WindowsWidgetProviderControllerTests {
             definitions: [makeControllerDefinition(source: source)]
         )
         let host = SuspendingRemovalControllerHost()
-        let service = WidgetRuntimeService(registry: registry, host: host)
+        let service = WidgetRuntimeService(
+            registry: registry,
+            host: host,
+            diagnostics: { _ in }
+        )
         try await service.createInstance(
             id: "instance",
             kind: "fixture",
@@ -101,6 +112,7 @@ struct WindowsWidgetProviderControllerTests {
             configuration: controllerConfiguration(),
             service: service,
             bridge: bridge,
+            actionHost: ControllerActionHost(),
             diagnostics: { _ in }
         )
 
@@ -114,6 +126,285 @@ struct WindowsWidgetProviderControllerTests {
         try await first.value
         try await second.value
         #expect(bridge.shutdownCompletionCount == 1)
+    }
+
+    @Test
+    func successfulActionRequestsTheNextTimelineGeneration() async throws {
+        let source = ControllerTimelineSource()
+        let registry = try RuntimeWidgetRegistry(
+            definitions: [makeControllerDefinition(source: source)]
+        )
+        let host = ControllerHost()
+        let service = WidgetRuntimeService(
+            registry: registry,
+            host: host,
+            diagnostics: { _ in }
+        )
+        let actionHost = ControllerActionHost(generation: 1)
+        let controller = WindowsWidgetProviderController(
+            configuration: controllerConfiguration(),
+            service: service,
+            bridge: ControllerBridge(),
+            actionHost: actionHost,
+            diagnostics: { _ in }
+        )
+
+        await controller.handle(
+            .create(
+                instanceID: "instance",
+                kind: "fixture",
+                family: .systemSmall,
+                isActive: true
+            )
+        )
+        try await waitForControllerCondition { await source.requestCount == 1 }
+        await controller.handle(
+            .actionInvoked(
+                instanceID: "instance",
+                verb: "action",
+                data: #"{"openWidgetActionID":"action"}"#,
+                customState: "state"
+            )
+        )
+        try await waitForControllerCondition { await source.requestCount == 2 }
+
+        #expect(await actionHost.invocationCount == 1)
+        #expect(await host.invalidations == [1, 2])
+        await service.shutdown()
+    }
+
+    @Test
+    func failedActionDoesNotRequestAnotherTimeline() async throws {
+        let source = ControllerTimelineSource()
+        let registry = try RuntimeWidgetRegistry(
+            definitions: [makeControllerDefinition(source: source)]
+        )
+        let host = ControllerHost()
+        let service = WidgetRuntimeService(
+            registry: registry,
+            host: host,
+            diagnostics: { _ in }
+        )
+        let actionHost = FailingControllerActionHost()
+        let controller = WindowsWidgetProviderController(
+            configuration: controllerConfiguration(),
+            service: service,
+            bridge: ControllerBridge(),
+            actionHost: actionHost,
+            diagnostics: { _ in }
+        )
+
+        await controller.handle(
+            .create(
+                instanceID: "instance",
+                kind: "fixture",
+                family: .systemSmall,
+                isActive: true
+            )
+        )
+        try await waitForControllerCondition { await source.requestCount == 1 }
+        await controller.handle(
+            .actionInvoked(
+                instanceID: "instance",
+                verb: "action",
+                data: #"{"openWidgetActionID":"action"}"#,
+                customState: "state"
+            )
+        )
+
+        try await waitForControllerCondition {
+            await actionHost.completionCount == 1
+        }
+        #expect(await actionHost.invocationCount == 1)
+        #expect(await source.requestCount == 1)
+        #expect(await host.invalidations == [1])
+        await service.shutdown()
+    }
+
+    @Test
+    func suspendedActionDoesNotBlockAFollowingDelete() async throws {
+        let source = ControllerTimelineSource()
+        let registry = try RuntimeWidgetRegistry(
+            definitions: [makeControllerDefinition(source: source)]
+        )
+        let host = ControllerHost()
+        let service = WidgetRuntimeService(
+            registry: registry,
+            host: host,
+            diagnostics: { _ in }
+        )
+        let actionHost = SuspendingControllerActionHost()
+        let controller = WindowsWidgetProviderController(
+            configuration: controllerConfiguration(),
+            service: service,
+            bridge: ControllerBridge(),
+            actionHost: actionHost,
+            diagnostics: { _ in }
+        )
+        await controller.handle(
+            .create(
+                instanceID: "instance",
+                kind: "fixture",
+                family: .systemSmall,
+                isActive: true
+            )
+        )
+        try await waitForControllerCondition { await source.requestCount == 1 }
+
+        await controller.handle(
+            .actionInvoked(
+                instanceID: "instance",
+                verb: "action",
+                data: #"{"openWidgetActionID":"action"}"#,
+                customState: "state"
+            )
+        )
+        try await waitForControllerCondition { await actionHost.isWaiting }
+        await controller.handle(
+            .delete(instanceID: "instance", customState: "state")
+        )
+
+        #expect(await service.currentConfigurations().isEmpty)
+        #expect(await host.removals == [2])
+        await actionHost.release()
+        try await waitForControllerCondition { await actionHost.didComplete }
+        #expect(await source.requestCount == 1)
+        #expect(await host.invalidations == [1])
+    }
+
+    @Test
+    func suspendedActionDoesNotBlockAFollowingShutdown() async throws {
+        let source = ControllerTimelineSource()
+        let registry = try RuntimeWidgetRegistry(
+            definitions: [makeControllerDefinition(source: source)]
+        )
+        let host = ControllerHost()
+        let service = WidgetRuntimeService(
+            registry: registry,
+            host: host,
+            diagnostics: { _ in }
+        )
+        let actionHost = SuspendingControllerActionHost()
+        let bridge = ControllerBridge()
+        let controller = WindowsWidgetProviderController(
+            configuration: controllerConfiguration(),
+            service: service,
+            bridge: bridge,
+            actionHost: actionHost,
+            diagnostics: { _ in }
+        )
+        await controller.handle(
+            .create(
+                instanceID: "instance",
+                kind: "fixture",
+                family: .systemSmall,
+                isActive: true
+            )
+        )
+        try await waitForControllerCondition { await source.requestCount == 1 }
+        await controller.handle(
+            .actionInvoked(
+                instanceID: "instance",
+                verb: "action",
+                data: #"{"openWidgetActionID":"action"}"#,
+                customState: "state"
+            )
+        )
+        try await waitForControllerCondition { await actionHost.isWaiting }
+
+        await controller.handle(.shutdownRequested)
+
+        #expect(bridge.shutdownCompletionCount == 1)
+        #expect(await service.currentConfigurations().isEmpty)
+        #expect(await host.removals == [2])
+        await actionHost.release()
+        try await waitForControllerCondition { await actionHost.didComplete }
+        #expect(await source.requestCount == 1)
+        #expect(await host.invalidations == [1])
+    }
+
+    @Test
+    func eventIngressOverflowRejectsFurtherEventsAndDrainsToShutdown() async throws {
+        let source = ControllerTimelineSource()
+        let registry = try RuntimeWidgetRegistry(
+            definitions: [makeControllerDefinition(source: source)]
+        )
+        let host = ControllerHost()
+        let diagnostics = WindowsDiagnosticRecorder()
+        let service = WidgetRuntimeService(
+            registry: registry,
+            host: host,
+            diagnostics: { diagnostic in
+                diagnostics.record(.runtime(diagnostic))
+            }
+        )
+        let bridge = ControllerBridge()
+        let overflowCounter = OverflowCounter()
+        let router = try WindowsWidgetEventRouter(
+            maximumPendingEventCount: 1,
+            diagnostics: diagnostics.record
+        )
+        router.installOverflowHandler(overflowCounter.increment)
+        router.enqueue(
+            .recover(
+                instanceID: "instance",
+                kind: "fixture",
+                family: .systemSmall,
+                isActive: false,
+                hasRetainedHostContent: true
+            )
+        )
+        router.enqueue(.activate(instanceID: "rejected"))
+        router.enqueue(.delete(instanceID: "also-rejected", customState: ""))
+
+        let controller = WindowsWidgetProviderController(
+            configuration: controllerConfiguration(),
+            service: service,
+            bridge: bridge,
+            actionHost: ControllerActionHost(),
+            diagnostics: diagnostics.record
+        )
+        router.install(controller)
+        defer { router.uninstall() }
+        try await waitForControllerCondition {
+            bridge.shutdownCompletionCount == 1
+        }
+
+        #expect(overflowCounter.value == 1)
+        #expect(diagnostics.values.count == 1)
+        #expect(
+            diagnostics.values.first?.cause == .eventQueueOverflow(
+                capacity: 1
+            )
+        )
+        #expect(await source.requestCount == 0)
+        #expect(await service.currentConfigurations().isEmpty)
+    }
+
+    @Test
+    func diagnosticRenderingNeverIncludesHostMessagesOrActionPayloads() {
+        let diagnostic = WindowsWidgetDiagnostic.providerEventFailure(
+            event: .actionInvoked(
+                instanceID: "instance",
+                verb: "private-verb",
+                data: "private-data",
+                customState: "private-state"
+            ),
+            kind: "fixture",
+            generation: 7,
+            error: WindowsWidgetHostError.hostRejected(
+                code: 19,
+                message: "private-host-message"
+            )
+        )
+
+        #expect(diagnostic.cause == .host(.hostRejected))
+        #expect(!diagnostic.renderedMessage.contains("private-verb"))
+        #expect(!diagnostic.renderedMessage.contains("private-data"))
+        #expect(!diagnostic.renderedMessage.contains("private-state"))
+        #expect(!diagnostic.renderedMessage.contains("private-host-message"))
+        #expect(diagnostic.renderedMessage.contains("instance=instance"))
+        #expect(diagnostic.renderedMessage.contains("generation=7"))
     }
 
     private func makeControllerDefinition(
@@ -223,6 +514,7 @@ private actor ControllerTimelineSource {
 
 private actor ControllerHost: RuntimeWidgetHost {
     private(set) var invalidations: [UInt64] = []
+    private(set) var removals: [UInt64] = []
 
     func invalidate(instanceID: String, generation: UInt64) {
         invalidations.append(generation)
@@ -230,7 +522,114 @@ private actor ControllerHost: RuntimeWidgetHost {
 
     func apply(_ update: RuntimeWidgetUpdate) {}
 
-    func remove(instanceID: String, generation: UInt64) {}
+    func remove(instanceID: String, generation: UInt64) {
+        removals.append(generation)
+    }
+}
+
+private actor ControllerActionHost: WindowsWidgetActionHost {
+    private let generation: UInt64
+    private(set) var invocationCount = 0
+
+    init(generation: UInt64 = 1) {
+        self.generation = generation
+    }
+
+    func beginAction(
+        instanceID: String,
+        verb: String,
+        data: String,
+        customState: String
+    ) -> WindowsWidgetActionExecution {
+        invocationCount += 1
+        let acceptedGeneration = generation
+        return WindowsWidgetActionExecution { acceptedGeneration }
+    }
+}
+
+private actor FailingControllerActionHost: WindowsWidgetActionHost {
+    private(set) var invocationCount = 0
+    private(set) var completionCount = 0
+
+    func beginAction(
+        instanceID: String,
+        verb: String,
+        data: String,
+        customState: String
+    ) -> WindowsWidgetActionExecution {
+        invocationCount += 1
+        return WindowsWidgetActionExecution { [self] in
+            await recordCompletion()
+            throw ControllerActionFailure.rejected
+        }
+    }
+
+    private func recordCompletion() {
+        completionCount += 1
+    }
+}
+
+private actor SuspendingControllerActionHost: WindowsWidgetActionHost {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var didComplete = false
+
+    var isWaiting: Bool { continuation != nil }
+
+    func beginAction(
+        instanceID: String,
+        verb: String,
+        data: String,
+        customState: String
+    ) -> WindowsWidgetActionExecution {
+        WindowsWidgetActionExecution { [self] in
+            await waitForRelease()
+            await recordCompletion()
+            return 1
+        }
+    }
+
+    private func waitForRelease() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    private func recordCompletion() {
+        didComplete = true
+    }
+}
+
+private enum ControllerActionFailure: Error {
+    case rejected
+}
+
+private final class WindowsDiagnosticRecorder: Sendable {
+    private let storage = Mutex<[WindowsWidgetDiagnostic]>([])
+
+    var values: [WindowsWidgetDiagnostic] {
+        storage.withLock { $0 }
+    }
+
+    func record(_ diagnostic: WindowsWidgetDiagnostic) {
+        storage.withLock { $0.append(diagnostic) }
+    }
+}
+
+private final class OverflowCounter: Sendable {
+    private let storage = Mutex(0)
+
+    var value: Int {
+        storage.withLock { $0 }
+    }
+
+    func increment() {
+        storage.withLock { $0 += 1 }
+    }
 }
 
 private actor SuspendingRemovalControllerHost: RuntimeWidgetHost {

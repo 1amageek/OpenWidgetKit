@@ -66,23 +66,47 @@ package final class RuntimeProviderRequest<Value: Sendable>: Sendable {
         case .accepted:
             break
         case .duplicate:
-            diagnostics(.duplicateProviderCompletion(kind: kind))
+            diagnostics(
+                .duplicateProviderCompletion(
+                    kind: kind,
+                    instanceID: nil,
+                    generation: nil
+                )
+            )
         case .late:
-            diagnostics(.lateProviderCompletion(kind: kind))
+            diagnostics(
+                .lateProviderCompletion(
+                    kind: kind,
+                    instanceID: nil,
+                    generation: nil
+                )
+            )
         }
         return disposition
     }
 
     package func succeed(_ value: Value) {
         guard complete(.success(value)) else {
-            diagnostics(.lateProviderCompletion(kind: kind))
+            diagnostics(
+                .lateProviderCompletion(
+                    kind: kind,
+                    instanceID: nil,
+                    generation: nil
+                )
+            )
             return
         }
     }
 
     package func fail(_ error: WidgetRuntimeError) {
         guard complete(.failure(error)) else {
-            diagnostics(.lateProviderCompletion(kind: kind))
+            diagnostics(
+                .lateProviderCompletion(
+                    kind: kind,
+                    instanceID: nil,
+                    generation: nil
+                )
+            )
             return
         }
     }

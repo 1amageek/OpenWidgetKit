@@ -1,3 +1,5 @@
+import OpenWidgetRuntime
+
 package enum AdaptiveCardCompilationError: Error, Equatable, Sendable {
     case invalidCacheCapacity(Int)
     case unsupportedHostCapabilities(String)
@@ -10,4 +12,10 @@ package enum AdaptiveCardCompilationError: Error, Equatable, Sendable {
     case unresolvedResource(String)
     case invalidLocalizedString(String)
     case serializationFailed(String)
+}
+
+extension AdaptiveCardCompilationError: WidgetRuntimeFailureConvertible {
+    package var widgetRuntimeFailureCode: WidgetRuntimeFailureCode {
+        .compilationFailed
+    }
 }

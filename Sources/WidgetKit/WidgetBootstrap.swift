@@ -20,7 +20,16 @@ extension Widget {
                 definitions: lowerWidget(Self.init())
             )
         } catch {
-            fatalError("Widget runtime startup failed: \(error)")
+            WidgetRuntimeComposition.report(
+                .operationFailed(
+                    instanceID: nil,
+                    kind: nil,
+                    generation: nil,
+                    operation: .startup,
+                    cause: WidgetRuntimeFailureCode(error)
+                )
+            )
+            fatalError("Widget runtime startup failed.")
         }
     }
 }
@@ -41,7 +50,16 @@ extension WidgetBundle {
                 definitions: lowerWidgetBundle(Self.init())
             )
         } catch {
-            fatalError("Widget runtime startup failed: \(error)")
+            WidgetRuntimeComposition.report(
+                .operationFailed(
+                    instanceID: nil,
+                    kind: nil,
+                    generation: nil,
+                    operation: .startup,
+                    cause: WidgetRuntimeFailureCode(error)
+                )
+            )
+            fatalError("Widget runtime startup failed.")
         }
     }
 }

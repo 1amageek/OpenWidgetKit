@@ -17,9 +17,7 @@ package struct SystemWidgetRuntimeClock: WidgetRuntimeClock {
         guard interval > 0 else { return }
         let nanoseconds = interval * 1_000_000_000
         guard nanoseconds.isFinite, nanoseconds <= Double(UInt64.max) else {
-            throw WidgetRuntimeError.hostRejected(
-                message: "The scheduler deadline is outside the supported range."
-            )
+            throw WidgetRuntimeError.invalidSchedulerDeadline
         }
         try await Task.sleep(nanoseconds: UInt64(nanoseconds.rounded(.up)))
     }

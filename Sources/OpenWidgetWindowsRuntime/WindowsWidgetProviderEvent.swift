@@ -31,16 +31,6 @@ package enum WindowsWidgetProviderEvent: Equatable, Sendable {
     case shutdownRequested
 }
 
-package struct WindowsWidgetBridgeDiagnostic: Equatable, Sendable {
-    package let code: Int32
-    package let message: String
-
-    package init(code: Int32, message: String) {
-        self.code = code
-        self.message = message
-    }
-}
-
 extension WindowsWidgetProviderEvent {
     package var operationName: String {
         switch self {

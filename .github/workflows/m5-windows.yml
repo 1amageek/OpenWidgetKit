@@ -1,6 +1,9 @@
 name: M5 Windows Provider Build
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -28,13 +31,6 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           path: CoreFoundation/OpenWidgetKit
-
-      - name: Check out OpenFoundation
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          repository: 1amageek/OpenFoundation
-          ref: 97e5aa8993133de9a253ce92ceeacc37cead3e73
-          path: CoreFoundation/OpenFoundation
 
       - name: Install the pinned Swift snapshot
         shell: pwsh
@@ -117,14 +113,47 @@ jobs:
               -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           & $SwiftExecutable.FullName --version
 
-      - name: Compile M4 and M5 Swift tests
+      - name: Compile the M4-M7 Swift source and test graph
         shell: pwsh
         working-directory: CoreFoundation/OpenWidgetKit
         run: |
           $ErrorActionPreference = "Stop"
           & swift build --build-tests
           if ($LASTEXITCODE -ne 0) {
-              throw "The M4/M5 Swift test targets failed to compile."
+              throw "The M4-M7 Swift source and test graph failed to compile."
+          }
+
+      - name: Execute the Windows behavior tests
+        shell: pwsh
+        working-directory: CoreFoundation/OpenWidgetKit
+        run: |
+          $ErrorActionPreference = "Stop"
+          $BinaryPath = (& swift build --show-bin-path).Trim()
+          if ($LASTEXITCODE -ne 0) {
+              throw "SwiftPM did not report the test binary directory."
+          }
+          $TestBinaries = @(
+              Get-ChildItem -Path $BinaryPath -File -Recurse |
+                  Where-Object {
+                      $_.Name -in @(
+                          "OpenWidgetKitPackageTests.exe",
+                          "OpenWidgetKitPackageTests.xctest",
+                          "OpenWidgetKitPackageTests"
+                      )
+                  }
+          )
+          if ($TestBinaries.Count -ne 1) {
+              throw "Expected exactly one OpenWidgetKit test runner; found $($TestBinaries.Count)."
+          }
+          $TestProcess = Start-Process `
+              -FilePath $TestBinaries[0].FullName `
+              -NoNewWindow -PassThru
+          if (-not $TestProcess.WaitForExit(600000)) {
+              Stop-Process -Id $TestProcess.Id -Force
+              throw "The Windows behavior tests exceeded the 10-minute timeout."
+          }
+          if ($TestProcess.ExitCode -ne 0) {
+              throw "The Windows behavior tests failed with exit code $($TestProcess.ExitCode)."
           }
 
       - name: Build the unsigned provider package
@@ -158,6 +187,11 @@ jobs:
           }
           ./scripts/build-m5-windows.ps1 `
               -Architecture "${{ matrix.architecture }}" `
+              -ConfigurationPath "Windows/Packaging/OpenWidgetProvider.json" `
+              -ProviderPackageDirectory "." `
+              -ProviderProduct "OpenWidgetWindowsProviderFixture" `
+              -GenerateFixtureAssets `
+              -AllowUnsigned `
               -OutputDirectory (Join-Path $env:RUNNER_TEMP "m5-${{ matrix.architecture }}")
 
       - name: Upload unsigned MSIX and build evidence
@@ -165,6 +199,6 @@ jobs:
         with:
           name: m5-windows-${{ matrix.architecture }}
           path: |
-            ${{ runner.temp }}/m5-${{ matrix.architecture }}/OpenWidgetKit-${{ matrix.architecture }}.msix
-            ${{ runner.temp }}/m5-${{ matrix.architecture }}/m5-build-evidence.json
+            ${{ runner.temp }}/m5-${{ matrix.architecture }}/*.msix
+            ${{ runner.temp }}/m5-${{ matrix.architecture }}/windows-provider-build-evidence.json
           if-no-files-found: error

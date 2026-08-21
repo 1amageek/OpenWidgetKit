@@ -62,6 +62,15 @@ WinRT callback object (borrowed)
 
 `WidgetContext`や`WidgetActionInvokedArgs`をSwift objectのstored propertyに保存しないでください。
 
+`OnActionInvoked`の`Verb`、`Data`、`CustomState`はすべてcallback内でUTF-8所有値へコピーします。
+Swift host actorは`UpdateWidget`成功後にだけenvironment-qualified verbとhandlerを公開し、
+`CustomState`のprovider session、widget instance、generation、entry revisionが一致する場合だけ実行します。
+bridge failureはhost受理後にも発生し得るため、提示済みrevisionは再利用せず、action tableは成功後だけ
+commitします。同じlogical actionのlight/dark verbは一つのin-flight fenceを共有します。action実行中に
+次entry、context変更、delete、shutdownが進んだ場合は旧実行から新timelineを生成せず、stale failureにします。
+event queueはactionのvalidation/予約後にintent completionの監視を分離するため、長時間のintentが
+後続のlifecycle callbackをhead-of-line blockingしません。
+
 ## Entry point and COM lifetime
 
 通常のMicrosoft sampleはC++ executableの`main`でclass factoryを登録します。しかし本packageは
