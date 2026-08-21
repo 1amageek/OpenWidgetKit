@@ -19,6 +19,8 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+. (Join-Path $PSScriptRoot "OpenWidgetWindowsArtifactTools.ps1")
+
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $BridgeProject = Join-Path $RepositoryRoot "Windows\Bridge\OpenWidgetWindowsBridge.vcxproj"
 $ConfigurationPath = if ([IO.Path]::IsPathRooted($ConfigurationPath)) {
@@ -112,6 +114,7 @@ $WixPackageContent = Join-Path $WixToolDirectory "package"
 $SwiftRuntimeImage = Join-Path $OutputDirectory "swift-runtime-image"
 $SwiftRuntimeIntermediate = Join-Path $OutputDirectory "swift-runtime-obj"
 $InspectionDirectory = Join-Path $OutputDirectory "inspection"
+$RuntimeDependencyDirectory = Join-Path $OutputDirectory "runtime-dependencies"
 $EvidencePath = Join-Path $OutputDirectory "windows-provider-build-evidence.json"
 
 function Invoke-Checked {
@@ -336,6 +339,125 @@ function Assert-RuntimeDependencyClosure {
                 throw "The Swift redistributable does not close runtime dependency '$Dependent'."
             }
         }
+    }
+}
+
+function Export-ZipEntry {
+    param(
+        [IO.Compression.ZipArchive]$Archive,
+        [string]$EntryPath,
+        [string]$DestinationPath
+    )
+    $Entry = $Archive.GetEntry($EntryPath)
+    if ($null -eq $Entry) {
+        throw "The archive is missing '$EntryPath'."
+    }
+    $DestinationDirectory = Split-Path -Parent $DestinationPath
+    New-Item -ItemType Directory -Path $DestinationDirectory -Force |
+        Out-Null
+    [IO.Compression.ZipFileExtensions]::ExtractToFile(
+        $Entry,
+        $DestinationPath,
+        $true
+    )
+}
+
+function Export-WindowsAppRuntimeDependencies {
+    param(
+        [string]$RuntimeNuGetPackage,
+        [string]$TargetArchitecture,
+        [object]$BuildConfiguration,
+        [string]$Destination
+    )
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    $Archive = [IO.Compression.ZipFile]::OpenRead($RuntimeNuGetPackage)
+    try {
+        $RuntimeFolder = "tools/MSIX/win10-$TargetArchitecture"
+        $PackageNames = @(
+            "Microsoft.WindowsAppRuntime.2.msix",
+            "Microsoft.WindowsAppRuntime.Main.2.msix",
+            "Microsoft.WindowsAppRuntime.Singleton.2.msix",
+            "Microsoft.WindowsAppRuntime.DDLM.2.msix"
+        )
+        foreach ($PackageName in $PackageNames) {
+            Export-ZipEntry `
+                -Archive $Archive `
+                -EntryPath "$RuntimeFolder/$PackageName" `
+                -DestinationPath (Join-Path $Destination $PackageName)
+        }
+        Export-ZipEntry `
+            -Archive $Archive `
+            -EntryPath "license.txt" `
+            -DestinationPath (Join-Path $Destination "WindowsAppSDK-license.txt")
+        Export-ZipEntry `
+            -Archive $Archive `
+            -EntryPath "NOTICE.txt" `
+            -DestinationPath (Join-Path $Destination "WindowsAppSDK-NOTICE.txt")
+    }
+    finally {
+        $Archive.Dispose()
+    }
+
+    $RuntimePackages = @(
+        $PackageNames | ForEach-Object {
+            $PackagePath = Join-Path $Destination $_
+            Invoke-Checked signtool @("verify", "/pa", "/all", $PackagePath)
+            $Identity = Get-OpenWidgetMSIXMetadata -PackagePath $PackagePath
+            if ($Identity.Architecture -ne $TargetArchitecture) {
+                throw "The Windows App Runtime package '$($_)' has architecture '$($Identity.Architecture)' instead of '$TargetArchitecture'."
+            }
+            if ($Identity.Publisher -ne $BuildConfiguration.windowsAppRuntimePublisher) {
+                throw "The Windows App Runtime package '$($_)' has an unexpected publisher."
+            }
+            if ($_ -eq "Microsoft.WindowsAppRuntime.2.msix" `
+                -and ($Identity.Name -ne $BuildConfiguration.windowsAppRuntimePackageName `
+                    -or [Version]$Identity.Version -lt [Version]$BuildConfiguration.windowsAppRuntimeMinVersion)) {
+                throw "The Windows App Runtime framework package does not satisfy the manifest dependency."
+            }
+            [PSCustomObject]@{
+                FileName = $_
+                IdentityName = $Identity.Name
+                Publisher = $Identity.Publisher
+                Version = $Identity.Version
+                Architecture = $Identity.Architecture
+                SHA256 = (Get-FileHash -Algorithm SHA256 -Path $PackagePath).Hash
+            }
+        }
+    )
+    return $RuntimePackages
+}
+
+function Export-VisualCppRedistributable {
+    param(
+        [string]$TargetArchitecture,
+        [string]$Destination
+    )
+    if (-not $env:VCToolsRedistDir `
+        -or -not (Test-Path $env:VCToolsRedistDir -PathType Container)) {
+        throw "VCToolsRedistDir must identify the Visual C++ redistributable directory."
+    }
+    $FileName = "vc_redist.$TargetArchitecture.exe"
+    $Candidates = @(
+        Get-ChildItem -Path $env:VCToolsRedistDir `
+            -Filter $FileName -File -Recurse
+    )
+    if ($Candidates.Count -ne 1) {
+        throw "Expected exactly one '$FileName' under VCToolsRedistDir; found $($Candidates.Count)."
+    }
+    $DestinationPath = Join-Path $Destination $FileName
+    Copy-Item -Path $Candidates[0].FullName -Destination $DestinationPath
+    Assert-PEMachine `
+        -Files @($DestinationPath) `
+        -TargetArchitecture $TargetArchitecture
+    Invoke-Checked signtool @("verify", "/pa", "/all", $DestinationPath)
+    $Version = [Diagnostics.FileVersionInfo]::GetVersionInfo($DestinationPath)
+    return [PSCustomObject]@{
+        FileName = $FileName
+        FileVersion = $Version.FileVersion
+        ProductVersion = $Version.ProductVersion
+        Architecture = $TargetArchitecture
+        SHA256 = (Get-FileHash -Algorithm SHA256 -Path $DestinationPath).Hash
     }
 }
 
@@ -625,6 +747,14 @@ try {
             throw "NuGet package hash mismatch for $($Package.Path): $ActualPackageHash"
         }
     }
+    $WindowsAppRuntimePackages = Export-WindowsAppRuntimeDependencies `
+        -RuntimeNuGetPackage $PinnedPackages[3].Path `
+        -TargetArchitecture $Architecture `
+        -BuildConfiguration $Configuration.build `
+        -Destination $RuntimeDependencyDirectory
+    $VisualCppRedistributable = Export-VisualCppRedistributable `
+        -TargetArchitecture $Architecture `
+        -Destination $RuntimeDependencyDirectory
     if (-not (Test-Path $BridgeOutput -PathType Container)) {
         throw "The C++/WinRT bridge output directory was not found."
     }
@@ -751,7 +881,7 @@ try {
         } | Sort-Object Path
 
     $Evidence = [PSCustomObject]@{
-        SchemaVersion = 4
+        SchemaVersion = 5
         Architecture = $Architecture
         SwiftTriple = $SwiftTriple
         ProviderProduct = $ProviderProduct
@@ -775,6 +905,8 @@ try {
             Publisher = $Configuration.build.windowsAppRuntimePublisher
             MinVersion = $Configuration.build.windowsAppRuntimeMinVersion
         }
+        WindowsAppRuntimePackages = $WindowsAppRuntimePackages
+        VisualCppRedistributable = $VisualCppRedistributable
         VisualCToolset = $Configuration.build.visualCToolset
         WindowsSDKVersion = $Configuration.build.windowsSDKVersion
         FoundationLinkMode = $Configuration.build.foundationLinkMode

@@ -49,8 +49,12 @@ shared API, behavior, OpenFoundation identity, and dynamic Foundation runtime
 on x64. The M5 gate compiles the package test graph, Swift provider executable,
 and C++/WinRT bridge natively on both x64 and ARM64, then verifies the official
 architecture-matched Swift runtime closure and expanded unsigned MSIX. It does
-not activate COM or execute the provider in Widgets Board. Signed installation
-and real Widgets Board acceptance remain M6.
+not activate COM or execute the provider in Widgets Board. The same workflow
+also produces an architecture-specific M6 resume bundle containing a
+development-signed copy, public trust certificate, Windows App Runtime 2.3.1,
+the native Visual C++ Redistributable, host scripts, and hash evidence. Signed
+installation, COM activation on a client host, and real Widgets Board acceptance
+remain M6.
 
 The current P0/P1 hardening makes the Windows workflow run on pushes and pull
 requests, lets SwiftPM launch its generated test products with a ten-minute
@@ -128,6 +132,7 @@ flowchart LR
 | [API_COMPATIBILITY.md](API_COMPATIBILITY.md) | Pinned Apple API inventory, M2/M3 compatibility surface, fixtures, and Windows M1 compile baseline |
 | [Verification/M1_WINDOWS_EVIDENCE.json](Verification/M1_WINDOWS_EVIDENCE.json) | Normalized pinned Windows toolchain, behavior, module, and runtime evidence for M1 |
 | [Verification/M5_WINDOWS_EVIDENCE.json](Verification/M5_WINDOWS_EVIDENCE.json) | Normalized x64/ARM64 Swift, C++/WinRT, runtime-closure, and MSIX build evidence for M5 |
+| [M6_WINDOWS_RUNBOOK.md](M6_WINDOWS_RUNBOOK.md) | One-command artifact validation, installation, packaged COM probe, Widgets Board matrix, and cleanup for the first real Windows host |
 | [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md) | Ledger of unimplemented APIs, milestones, and verification evidence |
 
 ## Package boundary
@@ -312,7 +317,11 @@ The Swift provider executable owns the packaged application. The C++/WinRT
 bridge remains a class library, and the generated manifest declares a
 framework-package dependency on `Microsoft.WindowsAppRuntime.2` version
 2.3.1.0 or later. The package gate verifies that dependency after expanding the
-MSIX.
+MSIX. It also extracts the four architecture-matched Microsoft-signed runtime
+packages from the already SHA-256-pinned runtime NuGet package and captures the
+native Visual C++ Redistributable selected by the active v145 toolset. This
+keeps fresh-host deployment dependencies in the same evidence chain as the
+provider instead of assuming they already exist on the machine.
 
 ## Windows provider build gate
 
@@ -347,5 +356,20 @@ The repository workflow runs this script on
 requires the active Swift host triple and Visual Studio host architecture to
 match the package architecture, so this gate never substitutes cross-compiled
 output. The repository fixture deliberately selects unsigned output. Signed
-installation, gallery discovery, pinning, COM activation, and visual behavior
-still require the M6 real-host gate and are not reported by package assembly.
+production distribution still requires an externally owned certificate and
+timestamp policy.
+
+For real-host continuation, the workflow passes the preserved unsigned M5
+output to `scripts/prepare-m6-windows.ps1`. That script creates a non-exportable,
+180-day development signing key, signs a copy of the MSIX, exports only the
+public certificate, removes the private key from the runner, and emits the
+`m6-windows-resume-x64` and `m6-windows-resume-arm64` artifacts. Each artifact
+contains `start-m6-windows.ps1`, which first verifies every recorded hash and
+signature. On an elevated Windows 11 client it then installs missing runtime
+dependencies, trusts the development certificate, installs the provider, and
+performs a time-bounded packaged COM activation probe. See
+[M6_WINDOWS_RUNBOOK.md](M6_WINDOWS_RUNBOOK.md).
+
+Artifact preparation does not count as signed installation or COM activation
+on a real client. Gallery discovery, pinning, lifecycle, visual behavior,
+interaction, and shutdown remain the M6 real-host gate.

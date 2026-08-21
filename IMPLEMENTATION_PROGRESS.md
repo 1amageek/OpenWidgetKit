@@ -15,9 +15,9 @@
 | public WidgetKit API | host-neutral M3 implemented; Native/WASM behavior and Windows x64/ARM64 compilation verified | static configuration, provider bridge, registry bootstrap, and WidgetCenter routing |
 | runtime behavior | host-neutral M3 implemented | provider ownership, validation, three reload policies, generation fences, cancellation, and shutdown |
 | Adaptive Cards compiler | M4 host-neutral implementation verified on Native and normal WASM | canonical encoder, structural identity/cache, theme/family templates, resources, mappings, typed failures, 12 Native tests, and the normal WASM target build |
-| Windows provider | M5 source, host-neutral Windows behavior, and x64/ARM64 build/package gates verified; real host pending M6 | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, native-architecture packaging workflow, 97 package tests per Windows architecture, and expanded MSIX evidence |
+| Windows provider | M5 source, host-neutral Windows behavior, and x64/ARM64 build/package gates verified; M6 resume artifacts prepared; real host pending | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, native-architecture packaging workflow, 97 package tests per Windows architecture, expanded MSIX evidence, development signing, complete runtime redistribution bundle, and bounded host bootstrap |
 | interaction | M7 host-neutral behavior and API surface verified on Native, normal WASM, and x64/ARM64 Windows | bounded AppIntents product, deferred localized-resource resolution, stable logical/environment action bindings, session/instance/accepted-entry fences, nonblocking intent monitoring, typed failures, success-triggered reload, Apple/replacement fixtures, and platform behavior builds/tests; real Widgets Board action delivery remains M6 |
-| build/test/runtime verification | Native, normal WASM, Windows M1, and Windows M5 gates pass | all 97 focused tests pass on Native and each Windows architecture, pinned Apple/replacement API verification passes, normal WASM API/compiler builds and behavior fixtures pass, M1 x64 behavior passes, and M5 x64/ARM64 compile/link/test/package gates pass; COM activation and real Widgets Board runtime remain unexecuted |
+| build/test/runtime verification | Native, normal WASM, Windows M1/M5, and x64/ARM64 M6 artifact gates pass | all 97 focused tests pass on Native and each Windows architecture, pinned Apple/replacement API verification passes, normal WASM API/compiler builds and behavior fixtures pass, M1 x64 behavior passes, M5 x64/ARM64 compile/link/test/package gates pass, and both self-contained M6 resume bundles pass non-mutating provenance validation; real-client installation, COM activation, and Widgets Board runtime remain unexecuted |
 
 The 2026-08-20 architectural review corrected inactive lifecycle handling,
 delete/recreate generation continuity, template reset across instance lifetimes,
@@ -36,7 +36,10 @@ The recorded native Windows x64/ARM64 gates compile the full Swift test graph,
 let SwiftPM execute all 97 package tests with a ten-minute timeout, build the
 provider executable and C++/WinRT bridge, prove the official runtime dependency
 closure, and inspect the expanded unsigned MSIX. The push/pull-request workflow
-resolves OpenFoundation from its pinned remote revision.
+resolves OpenFoundation from its pinned remote revision. It also exports the
+Microsoft-signed Windows App Runtime packages and native Visual C++
+Redistributable, creates a development-signed M6 copy without exporting the
+private key, and verifies the complete resume bundle on both architectures.
 
 Import-only success, declaration presence, or Package.swift resolution is not implementation evidence.
 
@@ -79,7 +82,9 @@ OpenFoundation localized-value supplement. The x86_64 Windows M1 gate
 executes its behavior fixture and verifies Foundation module/runtime identity.
 The recorded M5 gate compiles all package test targets, executes all 97
 host-neutral behavior tests, and builds, links, and packages the provider on
-native x64 and ARM64 runners. It does not activate packaged COM or execute the
+native x64 and ARM64 runners. The workflow then prepares and validates a
+self-contained M6 resume bundle for each architecture. It does not install that
+bundle on a Windows 11 client, activate packaged COM there, or execute the
 provider lifecycle in Widgets Board.
 
 ## Milestone dependency graph
@@ -91,7 +96,7 @@ flowchart LR
     M2["M2 SwiftUI subset and IR<br/>source + Native/WASM verified"]
     M3["M3 Timeline runtime<br/>source + Native/WASM verified"]
     M4["M4 Adaptive Cards compiler<br/>Native tests + normal WASM build pass"]
-    M5["M5 WinRT bridge and MSIX<br/>x64/ARM64 build/package gate passes"]
+    M5["M5 WinRT bridge and MSIX<br/>x64/ARM64 package + M6 resume artifacts pass"]
     M6["M6 Real Board static E2E<br/>1-2 weeks"]
     M7["M7 Interaction<br/>Native/WASM/Windows behavior verified"]
 
@@ -268,9 +273,14 @@ and unknown, malformed, duplicate, and stale actions fail explicitly.
 - [x] Build/link x64
 - [x] Build/link arm64
 - [x] Inspect expanded MSIX contents and record M5 evidence
+- [x] Export all architecture-matched Windows App Runtime packages from the pinned NuGet graph
+- [x] Capture and verify the native Visual C++ Redistributable required by the provider executable, Swift runtime, and bridge
+- [x] Produce development-signed x64/ARM64 M6 resume bundles without exporting private keys
+- [x] Verify all M6 bundle hashes, identities, signatures, scripts, and dependency metadata without mutating the CI host
 
 ## M6: Real Windows Widgets Board static E2E
 
+- [x] Provide a bounded real-host bootstrap for prerequisite validation, dependency installation, provider installation, COM activation, typed evidence, and cleanup
 - [ ] Install signed development MSIX
 - [ ] Discover widget in gallery
 - [ ] Pin widget

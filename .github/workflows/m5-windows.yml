@@ -141,7 +141,7 @@ jobs:
               throw "The Windows behavior tests failed with exit code $($TestProcess.ExitCode)."
           }
 
-      - name: Build the unsigned provider package
+      - name: Build M5 package and prepare the M6 resume bundle
         shell: pwsh
         working-directory: CoreFoundation/OpenWidgetKit
         run: |
@@ -170,6 +170,8 @@ jobs:
           if ($env:VSCMD_ARG_HOST_ARCH -ne $TargetArchitecture) {
               throw "Visual Studio host architecture mismatch: $env:VSCMD_ARG_HOST_ARCH"
           }
+          $M5Output = Join-Path $env:RUNNER_TEMP "m5-${{ matrix.architecture }}"
+          $M6Output = Join-Path $env:RUNNER_TEMP "m6-${{ matrix.architecture }}"
           ./scripts/build-m5-windows.ps1 `
               -Architecture "${{ matrix.architecture }}" `
               -ConfigurationPath "Windows/Packaging/OpenWidgetProvider.json" `
@@ -177,7 +179,23 @@ jobs:
               -ProviderProduct "OpenWidgetWindowsProviderFixture" `
               -GenerateFixtureAssets `
               -AllowUnsigned `
-              -OutputDirectory (Join-Path $env:RUNNER_TEMP "m5-${{ matrix.architecture }}")
+              -OutputDirectory $M5Output
+          ./scripts/prepare-m6-windows.ps1 `
+              -Architecture "${{ matrix.architecture }}" `
+              -ConfigurationPath "Windows/Packaging/OpenWidgetProvider.json" `
+              -M5BuildOutputDirectory $M5Output `
+              -OutputDirectory $M6Output
+
+      - name: Validate the self-contained M6 resume bundle
+        shell: pwsh
+        working-directory: CoreFoundation/OpenWidgetKit
+        run: |
+          $ErrorActionPreference = "Stop"
+          $M6Output = Join-Path $env:RUNNER_TEMP "m6-${{ matrix.architecture }}"
+          & (Join-Path $M6Output "start-m6-windows.ps1") `
+              -BundleDirectory $M6Output `
+              -ValidateArtifactOnly `
+              -EvidenceOutputPath (Join-Path $M6Output "m6-artifact-validation-evidence.json")
 
       - name: Upload unsigned MSIX and build evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -186,4 +204,11 @@ jobs:
           path: |
             ${{ runner.temp }}/m5-${{ matrix.architecture }}/*.msix
             ${{ runner.temp }}/m5-${{ matrix.architecture }}/windows-provider-build-evidence.json
+          if-no-files-found: error
+
+      - name: Upload M6 real-host resume bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: m6-windows-resume-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/m6-${{ matrix.architecture }}
           if-no-files-found: error

@@ -261,6 +261,30 @@ Swift Provider executableがpackaged appを所有します。C++/WinRT bridge DL
 `Microsoft.WindowsAppRuntime.2` version 2.3.1.0以上をframework package dependencyとして宣言します。
 Widgets runtime DLLはこのWindows package graphから解決します。
 
+manifest dependencyは、Store外の新規hostへframework packageを自動配布する契約ではありません。
+同様にProvider、Swift runtime、C++/WinRT bridgeはMSVC runtimeへdynamic linkしています。
+そのためM6 resume artifactは、SHA-256を検証済みの
+`Microsoft.WindowsAppSDK.Runtime` NuGet packageからtarget architectureのFramework、Main、
+Singleton、DDLMを抽出し、active v145 toolsetのnative Visual C++ Redistributableも同梱します。
+real-host bootstrapだけがこれらのmachine capabilityを導入し、Provider package assemblyは
+hostへ依存しません。
+
+```mermaid
+flowchart LR
+    Build["M5 native build"] --> Payload["Provider MSIX"]
+    Build --> AppRuntime["Pinned Windows App Runtime<br/>Framework/Main/Singleton/DDLM"]
+    Build --> VCRuntime["Native VC Redistributable"]
+    Payload --> Resume["Development-signed M6 resume bundle"]
+    AppRuntime --> Resume
+    VCRuntime --> Resume
+    Resume --> Host["Windows 11 client bootstrap"]
+    Host --> Board["Packaged COM + Widgets Board"]
+```
+
+CIで生成する自己署名証明書はM6 development validation専用です。private keyはexportせず、
+runnerのcertificate storeからartifact生成後に削除します。artifactはpublic certificateだけを持ち、
+real hostが明示的に`LocalMachine\\TrustedPeople`へ導入します。production signing policyとは分離します。
+
 baseline更新時に次を固定して記録します。
 
 - Swift Windows toolchain version and compiler commit;
