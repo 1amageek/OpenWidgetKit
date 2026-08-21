@@ -396,11 +396,6 @@ try {
     } else {
         $HostEvidence.CertificateTrust = "alreadyPresent"
     }
-    $TrustedSignature = Get-AuthenticodeSignature -FilePath $SignedPackagePath
-    if ($TrustedSignature.Status -ne [Management.Automation.SignatureStatus]::Valid) {
-        throw "The development MSIX signature is not valid after certificate trust installation."
-    }
-
     if ($ExistingPackages.Count -gt 0) {
         foreach ($ExistingPackage in $ExistingPackages) {
             Remove-AppxPackage -Package $ExistingPackage.PackageFullName

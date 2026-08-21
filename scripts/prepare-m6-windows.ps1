@@ -187,7 +187,7 @@ $CertificatePath = Join-Path `
     $OutputDirectory `
     "$($Configuration.provider.packageName)-development.cer"
 $Certificate = $null
-$TrustedCertificatePath = $null
+$RootCertificatePath = $null
 try {
     $Certificate = New-SelfSignedCertificate `
         -Type Custom `
@@ -220,9 +220,9 @@ try {
     }
     Import-Certificate `
         -FilePath $CertificatePath `
-        -CertStoreLocation "Cert:\CurrentUser\TrustedPeople" | Out-Null
-    $TrustedCertificatePath = `
-        "Cert:\CurrentUser\TrustedPeople\$($Certificate.Thumbprint)"
+        -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
+    $RootCertificatePath = `
+        "Cert:\CurrentUser\Root\$($Certificate.Thumbprint)"
 
     Copy-Item -Path $UnsignedPackagePath -Destination $SignedPackagePath
     Invoke-Checked signtool @(
@@ -312,8 +312,8 @@ try {
     $Evidence | ConvertTo-Json -Depth 8
 }
 finally {
-    if ($TrustedCertificatePath -and (Test-Path $TrustedCertificatePath)) {
-        Remove-Item -LiteralPath $TrustedCertificatePath -Force
+    if ($RootCertificatePath -and (Test-Path $RootCertificatePath)) {
+        Remove-Item -LiteralPath $RootCertificatePath -Force
     }
     if ($null -ne $Certificate) {
         $PrivateCertificatePath = "Cert:\CurrentUser\My\$($Certificate.Thumbprint)"

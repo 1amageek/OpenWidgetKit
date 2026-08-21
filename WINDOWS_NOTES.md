@@ -287,6 +287,9 @@ flowchart LR
 CIで生成する自己署名証明書はM6 development validation専用です。private keyはexportせず、
 runnerのcertificate storeからartifact生成後に削除します。artifactはpublic certificateだけを持ち、
 real hostが明示的に`LocalMachine\\TrustedPeople`へ導入します。production signing policyとは分離します。
+SignToolによるCIのAuthenticode chain検証には一時的な`CurrentUser\\Root`を使用し、署名検証後に
+private certificateと一緒に必ず削除します。real hostのMSIX deployment trustは
+`Add-AppxPackage`が判定し、一般Authenticode chain statusを代用しません。
 
 baseline更新時に次を固定して記録します。
 
