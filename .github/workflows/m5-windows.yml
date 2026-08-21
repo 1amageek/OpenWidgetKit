@@ -141,9 +141,8 @@ jobs:
           )
           foreach ($TestTarget in $TestTargets) {
               $RunnerNames = @(
-                  $TestTarget,
-                  "$TestTarget.exe",
-                  "$TestTarget.xctest"
+                  "$TestTarget-test-runner",
+                  "$TestTarget-test-runner.exe"
               )
               $TestBinaries = @(
                   Get-ChildItem -Path $BinaryPath -File -Recurse |
