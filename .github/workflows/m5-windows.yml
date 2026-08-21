@@ -99,26 +99,8 @@ jobs:
           }
           $SwiftExecutable = $SwiftExecutable[0]
           $SwiftBin = $SwiftExecutable.DirectoryName
-          $SwiftTargetInfo = (& $SwiftExecutable.FullName -print-target-info |
-              ConvertFrom-Json)
-          $SwiftCoreLibraries = @(Get-ChildItem `
-              -Path $SearchRoots -Recurse -Filter swiftCore.dll -File)
-          $RuntimeLibraryCandidates = @(
-              @($SwiftTargetInfo.paths.runtimeLibraryPaths |
-                  Where-Object { Test-Path $_ }) +
-              @($SwiftCoreLibraries | ForEach-Object { $_.DirectoryName })
-          )
-          $RuntimeLibraryPaths = @(
-              $RuntimeLibraryCandidates |
-                  Where-Object { $_ } | Select-Object -Unique
-          )
-          if ($SwiftCoreLibraries.Count -eq 0 -or
-              $RuntimeLibraryPaths.Count -eq 0) {
-              throw "The selected Swift installation has no discoverable runtime libraries."
-          }
-          $ToolchainPathEntries = @($SwiftBin) + $RuntimeLibraryPaths
-          $env:Path = (@($ToolchainPathEntries) + @($env:Path)) -join ";"
-          $ToolchainPathEntries | Out-File `
+          $env:Path = "$SwiftBin;$env:Path"
+          $SwiftBin | Out-File `
               -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $env:OPENWIDGET_SWIFT_SNAPSHOT = $Snapshot
           $env:OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER = $Snapshot
@@ -146,41 +128,17 @@ jobs:
         working-directory: CoreFoundation/OpenWidgetKit
         run: |
           $ErrorActionPreference = "Stop"
-          $BinaryPath = (& swift build --show-bin-path).Trim()
-          if ($LASTEXITCODE -ne 0) {
-              throw "SwiftPM did not report the test binary directory."
+          $SwiftExecutable = (Get-Command swift -ErrorAction Stop).Source
+          $TestProcess = Start-Process `
+              -FilePath $SwiftExecutable `
+              -ArgumentList @("test", "--skip-build") `
+              -NoNewWindow -PassThru
+          if (-not $TestProcess.WaitForExit(600000)) {
+              Stop-Process -Id $TestProcess.Id -Force
+              throw "The Windows behavior tests exceeded the ten-minute timeout."
           }
-          $TestTargets = @(
-              "OpenWidgetRuntimeTests",
-              "SwiftUITests",
-              "WidgetKitTests",
-              "OpenWidgetAdaptiveCardsTests",
-              "OpenWidgetWindowsRuntimeTests"
-          )
-          foreach ($TestTarget in $TestTargets) {
-              $RunnerNames = @(
-                  "$TestTarget-test-runner",
-                  "$TestTarget-test-runner.exe"
-              )
-              $TestBinaries = @(
-                  Get-ChildItem -Path $BinaryPath -File -Recurse |
-                      Where-Object {
-                          $_.Name -in $RunnerNames
-                      }
-              )
-              if ($TestBinaries.Count -ne 1) {
-                  throw "Expected exactly one $TestTarget runner; found $($TestBinaries.Count)."
-              }
-              $TestProcess = Start-Process `
-                  -FilePath $TestBinaries[0].FullName `
-                  -NoNewWindow -PassThru
-              if (-not $TestProcess.WaitForExit(120000)) {
-                  Stop-Process -Id $TestProcess.Id -Force
-                  throw "$TestTarget exceeded the two-minute timeout."
-              }
-              if ($TestProcess.ExitCode -ne 0) {
-                  throw "$TestTarget failed with exit code $($TestProcess.ExitCode)."
-              }
+          if ($TestProcess.ExitCode -ne 0) {
+              throw "The Windows behavior tests failed with exit code $($TestProcess.ExitCode)."
           }
 
       - name: Build the unsigned provider package
