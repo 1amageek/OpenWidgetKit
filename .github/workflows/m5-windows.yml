@@ -99,8 +99,18 @@ jobs:
           }
           $SwiftExecutable = $SwiftExecutable[0]
           $SwiftBin = $SwiftExecutable.DirectoryName
-          $env:Path = "$SwiftBin;$env:Path"
-          $SwiftBin | Out-File `
+          $SwiftTargetInfo = (& $SwiftExecutable.FullName -print-target-info |
+              ConvertFrom-Json)
+          $RuntimeLibraryPaths = @($SwiftTargetInfo.paths.runtimeLibraryPaths)
+          $MissingRuntimeLibraryPaths = @($RuntimeLibraryPaths |
+              Where-Object { -not (Test-Path $_) })
+          if ($RuntimeLibraryPaths.Count -eq 0 -or
+              $MissingRuntimeLibraryPaths.Count -ne 0) {
+              throw "The Swift runtime library paths are unavailable: $MissingRuntimeLibraryPaths"
+          }
+          $ToolchainPathEntries = @($SwiftBin) + $RuntimeLibraryPaths
+          $env:Path = (@($ToolchainPathEntries) + @($env:Path)) -join ";"
+          $ToolchainPathEntries | Out-File `
               -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           $env:OPENWIDGET_SWIFT_SNAPSHOT = $Snapshot
           $env:OPENWIDGET_SWIFT_TOOLCHAIN_IDENTIFIER = $Snapshot
