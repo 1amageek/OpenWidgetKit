@@ -330,6 +330,12 @@ try {
     Assert-OpenWidgetFileHash `
         -Path $VisualCppPath `
         -ExpectedSHA256 $ResumeEvidence.VisualCppRedistributable.SHA256 | Out-Null
+    if ($ResumeEvidence.VisualCppRedistributable.PayloadArchitecture `
+        -ne $ResumeEvidence.Architecture `
+        -or $ResumeEvidence.VisualCppRedistributable.BootstrapperPEMachine `
+            -notin @("x86", "x64", "arm64")) {
+        throw "The Visual C++ Redistributable architecture evidence is invalid."
+    }
     $VisualCppSignature = Get-AuthenticodeSignature -FilePath $VisualCppPath
     if ($VisualCppSignature.Status -ne [Management.Automation.SignatureStatus]::Valid) {
         throw "The Visual C++ Redistributable signature is not valid."

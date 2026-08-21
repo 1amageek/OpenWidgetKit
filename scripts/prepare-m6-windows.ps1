@@ -283,7 +283,8 @@ try {
             FileName = $M5Evidence.VisualCppRedistributable.FileName
             FileVersion = $M5Evidence.VisualCppRedistributable.FileVersion
             ProductVersion = $M5Evidence.VisualCppRedistributable.ProductVersion
-            Architecture = $M5Evidence.VisualCppRedistributable.Architecture
+            PayloadArchitecture = $M5Evidence.VisualCppRedistributable.PayloadArchitecture
+            BootstrapperPEMachine = $M5Evidence.VisualCppRedistributable.BootstrapperPEMachine
             SHA256 = $M5Evidence.VisualCppRedistributable.SHA256
         }
         HostScripts = @(

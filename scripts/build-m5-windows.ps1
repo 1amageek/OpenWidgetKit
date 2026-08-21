@@ -304,6 +304,24 @@ function Assert-PEMachine {
     }
 }
 
+function Get-PEMachine {
+    param([string]$File)
+    $Headers = (& dumpbin /nologo /headers $File | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to inspect the PE machine for '$File'."
+    }
+    if ($Headers -match '(?im)^\s*8664 machine \(x64\)') {
+        return "x64"
+    }
+    if ($Headers -match '(?im)^\s*AA64 machine \(ARM64\)') {
+        return "arm64"
+    }
+    if ($Headers -match '(?im)^\s*14C machine \(x86\)') {
+        return "x86"
+    }
+    throw "'$File' has an unsupported PE machine."
+}
+
 function Assert-RuntimeDependencyClosure {
     param(
         [string[]]$EntryPoints,
@@ -447,16 +465,14 @@ function Export-VisualCppRedistributable {
     }
     $DestinationPath = Join-Path $Destination $FileName
     Copy-Item -Path $Candidates[0].FullName -Destination $DestinationPath
-    Assert-PEMachine `
-        -Files @($DestinationPath) `
-        -TargetArchitecture $TargetArchitecture
     Invoke-Checked signtool @("verify", "/pa", "/all", $DestinationPath)
     $Version = [Diagnostics.FileVersionInfo]::GetVersionInfo($DestinationPath)
     return [PSCustomObject]@{
         FileName = $FileName
         FileVersion = $Version.FileVersion
         ProductVersion = $Version.ProductVersion
-        Architecture = $TargetArchitecture
+        PayloadArchitecture = $TargetArchitecture
+        BootstrapperPEMachine = Get-PEMachine -File $DestinationPath
         SHA256 = (Get-FileHash -Algorithm SHA256 -Path $DestinationPath).Hash
     }
 }

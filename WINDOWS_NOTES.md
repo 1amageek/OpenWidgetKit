@@ -268,6 +268,9 @@ manifest dependencyは、Store外の新規hostへframework packageを自動配�
 Singleton、DDLMを抽出し、active v145 toolsetのnative Visual C++ Redistributableも同梱します。
 real-host bootstrapだけがこれらのmachine capabilityを導入し、Provider package assemblyは
 hostへ依存しません。
+Visual C++ Redistributableの`payload architecture`はactive toolset内の厳密な
+`vc_redist.<architecture>.exe`選択とMicrosoft署名で検証します。installer bootstrapper自身の
+PE machineはpayload architectureとは別の事実としてevidenceへ記録します。
 
 ```mermaid
 flowchart LR
