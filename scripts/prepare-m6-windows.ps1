@@ -99,7 +99,7 @@ $UnsignedMetadata = Get-OpenWidgetMSIXMetadata -PackagePath $UnsignedPackagePath
 if ($UnsignedMetadata.Name -ne $Configuration.provider.packageName `
     -or $UnsignedMetadata.Publisher -ne $Configuration.provider.publisher `
     -or $UnsignedMetadata.Architecture -ne $Architecture `
-    -or $UnsignedMetadata.ClassID -ne $Configuration.provider.classID) {
+    -or [Guid]$UnsignedMetadata.ClassID -ne [Guid]$Configuration.provider.classID) {
     throw "The unsigned M5 package metadata does not match the provider configuration."
 }
 if ($null -eq $UnsignedMetadata.RuntimeDependency `
