@@ -213,7 +213,6 @@ $CertificatePath = Join-Path `
     $OutputDirectory `
     "$($Configuration.provider.packageName)-development.cer"
 $Certificate = $null
-$RootCertificatePath = $null
 try {
     $Certificate = New-SelfSignedCertificate `
         -Type Custom `
@@ -252,21 +251,14 @@ try {
         $SignedPackagePath
     )
 
-    # Chain trust is added only after signing. Keeping the self-signed leaf out
-    # of Root while SignTool selects the private key avoids chain discovery on
-    # the signing path; Root is needed solely for the subsequent policy check.
-    Import-Certificate `
-        -FilePath $CertificatePath `
-        -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
-    $RootCertificatePath = `
-        "Cert:\CurrentUser\Root\$($Certificate.Thumbprint)"
-
-    Invoke-Checked signtool @("verify", "/pa", "/all", $SignedPackagePath)
     $Signature = Get-AuthenticodeSignature -FilePath $SignedPackagePath
-    if ($Signature.Status -ne [Management.Automation.SignatureStatus]::Valid `
-        -or $null -eq $Signature.SignerCertificate `
+    if ($null -eq $Signature.SignerCertificate `
         -or $Signature.SignerCertificate.Thumbprint -ne $Certificate.Thumbprint) {
-        throw "The signed development MSIX failed Authenticode verification."
+        throw "The development MSIX signer does not match the exported certificate."
+    }
+    if ($Signature.Status -eq [Management.Automation.SignatureStatus]::HashMismatch `
+        -or $Signature.Status -eq [Management.Automation.SignatureStatus]::NotSigned) {
+        throw "The development MSIX failed signature integrity validation."
     }
 
     $Evidence = [PSCustomObject]@{
@@ -308,6 +300,8 @@ try {
             NotAfter = $Certificate.NotAfter.ToUniversalTime().ToString("o")
             EnhancedKeyUsage = "1.3.6.1.5.5.7.3.3"
             PrivateKeyExported = $false
+            CIValidation = "integrityAndSignerMatch"
+            CIAuthenticodeStatus = $Signature.Status.ToString()
         }
         WindowsAppRuntimePackages = $RuntimePackageEvidence
         VisualCppRedistributable = [PSCustomObject]@{
@@ -343,9 +337,6 @@ try {
     $Evidence | ConvertTo-Json -Depth 8
 }
 finally {
-    if ($RootCertificatePath -and (Test-Path $RootCertificatePath)) {
-        Remove-Item -LiteralPath $RootCertificatePath -Force
-    }
     if ($null -ne $Certificate) {
         $PrivateCertificatePath = "Cert:\CurrentUser\My\$($Certificate.Thumbprint)"
         if (Test-Path $PrivateCertificatePath) {
