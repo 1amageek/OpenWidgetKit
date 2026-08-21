@@ -3,13 +3,13 @@
   "verification": {
     "date": "2026-08-21",
     "repository": "1amageek/OpenWidgetKit",
-    "runID": "32387237114",
-    "runURL": "https://github.com/1amageek/OpenWidgetKit/actions/runs/32387237114",
-    "headSHA": "9b8386182b32d7ee970d57d8a453223c6386895e",
+    "runID": "32435637477",
+    "runURL": "https://github.com/1amageek/OpenWidgetKit/actions/runs/32435637477",
+    "headSHA": "fb5bc90c3e2e21bd1e7cb32086bb6023319e3c79",
     "rawArtifactName": "m1-windows-evidence",
-    "rawArtifactFileSHA256": "450268480531836762F75FC7EF53A975B3B56A2ADDA57E72BD091B1BFF9AA3C5",
+    "rawArtifactFileSHA256": "01F3985CCF844D4DA2D6225058CFFD27D2048F708B29EFD5CA2E435C7CB64969",
     "runnerImage": "win25-vs2026",
-    "runnerImageVersion": "20260810.198.2"
+    "runnerImageVersion": "20260818.207.1"
   },
   "toolchain": {
     "snapshot": "swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a",

@@ -15,9 +15,9 @@
 | public WidgetKit API | host-neutral M3 implemented; Native/WASM behavior and Windows x64/ARM64 compilation verified | static configuration, provider bridge, registry bootstrap, and WidgetCenter routing |
 | runtime behavior | host-neutral M3 implemented | provider ownership, validation, three reload policies, generation fences, cancellation, and shutdown |
 | Adaptive Cards compiler | M4 host-neutral implementation verified on Native and normal WASM | canonical encoder, structural identity/cache, theme/family templates, resources, mappings, typed failures, 12 Native tests, and the normal WASM target build |
-| Windows provider | M5 source and x64/ARM64 build/package gate verified; runtime pending M6 | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, native-architecture packaging workflow, 13 Native host/manifest/controller tests, and expanded MSIX evidence |
-| interaction | M7 host-neutral behavior and API surface verified; Windows pending | bounded AppIntents product, deferred localized-resource resolution, stable logical/environment action bindings, session/instance/accepted-entry fences, nonblocking intent monitoring, typed failures, success-triggered reload, Native behavior tests, Apple/replacement fixtures, and normal WASM target builds |
-| build/test/runtime verification | Native, normal WASM, Windows M1, and Windows M5 build/package gates pass | all 97 focused Native tests pass, pinned Apple/replacement API verification passes, normal WASM API/compiler builds and behavior fixtures pass, M1 x64 behavior passes, and the recorded M5 x64/ARM64 compile/link/package gates pass; the revised Windows workflow, COM activation, and real Widgets Board runtime remain unexecuted |
+| Windows provider | M5 source, host-neutral Windows behavior, and x64/ARM64 build/package gates verified; real host pending M6 | C ABI, C++/WinRT provider, async Swift bootstrap, generation fences, configuration, manifest generator, native-architecture packaging workflow, 97 package tests per Windows architecture, and expanded MSIX evidence |
+| interaction | M7 host-neutral behavior and API surface verified on Native, normal WASM, and x64/ARM64 Windows | bounded AppIntents product, deferred localized-resource resolution, stable logical/environment action bindings, session/instance/accepted-entry fences, nonblocking intent monitoring, typed failures, success-triggered reload, Apple/replacement fixtures, and platform behavior builds/tests; real Widgets Board action delivery remains M6 |
+| build/test/runtime verification | Native, normal WASM, Windows M1, and Windows M5 gates pass | all 97 focused tests pass on Native and each Windows architecture, pinned Apple/replacement API verification passes, normal WASM API/compiler builds and behavior fixtures pass, M1 x64 behavior passes, and M5 x64/ARM64 compile/link/test/package gates pass; COM activation and real Widgets Board runtime remain unexecuted |
 
 The 2026-08-20 architectural review corrected inactive lifecycle handling,
 delete/recreate generation continuity, template reset across instance lifetimes,
@@ -33,11 +33,10 @@ the packaged-COM namespace declaration. Fifteen focused regression test
 declarations were added, and the host-fence and manifest tests were
 strengthened. All 97 Native tests and the affected normal WASM targets pass.
 The recorded native Windows x64/ARM64 gates compile the full Swift test graph,
-build the provider executable and C++/WinRT bridge, prove the official runtime
-dependency closure, and inspect the expanded unsigned MSIX. The revised
-push/pull-request workflow also executes the compiled test runner with a
-ten-minute timeout and resolves OpenFoundation from its pinned remote revision;
-that revised path has not run yet.
+let SwiftPM execute all 97 package tests with a ten-minute timeout, build the
+provider executable and C++/WinRT bridge, prove the official runtime dependency
+closure, and inspect the expanded unsigned MSIX. The push/pull-request workflow
+resolves OpenFoundation from its pinned remote revision.
 
 Import-only success, declaration presence, or Package.swift resolution is not implementation evidence.
 
@@ -78,11 +77,10 @@ the replacement. The replacement API fixture, behavior fixture, and M4 compiler
 target build for normal WASM with the pinned Swift 6.4 snapshot and the published
 OpenFoundation localized-value supplement. The x86_64 Windows M1 gate
 executes its behavior fixture and verifies Foundation module/runtime identity.
-The recorded M5 gate compiles M2-M5 test
-targets and builds, links, and packages the provider on native x64 and ARM64
-runners. It does not execute the Windows host lifecycle or Widgets Board
-behavior. The revised workflow is intended to execute the compiled package
-tests, but remains pending its first run.
+The recorded M5 gate compiles all package test targets, executes all 97
+host-neutral behavior tests, and builds, links, and packages the provider on
+native x64 and ARM64 runners. It does not activate packaged COM or execute the
+provider lifecycle in Widgets Board.
 
 ## Milestone dependency graph
 
@@ -95,7 +93,7 @@ flowchart LR
     M4["M4 Adaptive Cards compiler<br/>Native tests + normal WASM build pass"]
     M5["M5 WinRT bridge and MSIX<br/>x64/ARM64 build/package gate passes"]
     M6["M6 Real Board static E2E<br/>1-2 weeks"]
-    M7["M7 Interaction<br/>Native/API/WASM verified; Windows pending"]
+    M7["M7 Interaction<br/>Native/WASM/Windows behavior verified"]
 
     M0 --> M1
     M1 --> M2
@@ -166,7 +164,7 @@ Required work:
 - [x] Add one shared Apple/replacement compile fixture using `Date`, `CGFloat`, `CGPoint`, `CGSize`, and `CGRect`
 - [x] Verify non-Embedded OpenCoreGraphics values cross the OpenWidgetKit API without conversion on macOS and normal WASM
 - [x] Verify the intended Foundation re-export and public-import surface on Native, normal WASM, and pinned x86_64 Windows
-- [ ] Run the automatic push/PR Windows workflow that executes the compiled test runner and resolves the pinned remote OpenFoundation revision; workflow source is implemented but its first run is pending
+- [x] Run the automatic push/PR Windows workflow through SwiftPM's generated test products and the pinned remote OpenFoundation revision on x64 and ARM64
 - [x] Run `scripts/verify-m1-windows.ps1` on the pinned x86_64 Windows toolchain and record installed Foundation artifact hashes
 
 ## M2: Widget-scoped SwiftUI and semantic document

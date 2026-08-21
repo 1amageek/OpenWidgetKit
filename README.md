@@ -29,7 +29,7 @@ add platform conditionals to their imports or widget definitions.
 
 ## Status
 
-M2 through M5 are implemented in source. The package now
+M2 through M5 and M7 are implemented in source. The package now
 contains the widget-scoped SwiftUI view subset, immutable semantic documents,
 `Widget` and `StaticConfiguration` lowering, one-shot provider completion
 ownership, an immutable registry, generation-safe timeline scheduling, and
@@ -52,15 +52,14 @@ architecture-matched Swift runtime closure and expanded unsigned MSIX. It does
 not activate COM or execute the provider in Widgets Board. Signed installation
 and real Widgets Board acceptance remain M6.
 
-The current P0/P1 hardening changes make the Windows workflow run on pushes and
-pull requests, execute the compiled Windows test runner with a timeout, and
-exercise the standalone remote OpenFoundation dependency graph. These workflow
-changes have not yet run. Runtime diagnostics now use bounded, typed correlation
-records rather than arbitrary `Error` strings. Windows callback ingress uses a
-fixed-capacity ring buffer; overflow closes ingress, preserves a terminal
-shutdown event, and requests native shutdown. The complete 97-test Native suite,
-including the overflow and typed-diagnostic behavior, passes. Windows execution
-of the revised workflow remains pending.
+The current P0/P1 hardening makes the Windows workflow run on pushes and pull
+requests, lets SwiftPM launch its generated test products with a ten-minute
+timeout, and exercises the standalone remote OpenFoundation dependency graph.
+All 97 package tests pass on both x64 and ARM64 Windows in addition to Native.
+Runtime diagnostics use bounded, typed correlation records rather than
+arbitrary `Error` strings. Windows callback ingress uses a fixed-capacity ring
+buffer; overflow closes ingress, preserves a terminal shutdown event, and
+requests native shutdown.
 
 M7 interaction is now implemented in source through the Apple-compatible
 `AppIntent`-backed `Button` entry point. The semantic document retains stable
@@ -82,7 +81,8 @@ pinned Apple/replacement API fixture passes, and the M7 API plus Adaptive Cards
 targets build for normal WASM against the accompanying OpenFoundation localized-
 value supplement. The release manifest now pins the published supplement, so
 the clean standalone WASM dependency graph exercises the same implementation.
-Windows M7 compilation and real Widgets Board interaction remain unverified.
+M7 compiles and its host-neutral behavior tests pass on x64 and ARM64 Windows;
+real action delivery through Widgets Board remains unverified.
 
 The latest lifecycle review corrected or clarified inactive-state suppression,
 retained-content-aware recovery, monotonic
@@ -112,7 +112,7 @@ flowchart LR
     Scheduler --> Compiler["Adaptive Cards compiler<br/>M4 Native/WASM verified"]
     Compiler --> Windows["Windows host and packaging<br/>M5 x64/ARM64 build and MSIX gate pass"]
     Windows --> Board["Widgets Board E2E<br/>M6 pending"]
-    Windows --> Interaction["AppIntent interaction path<br/>Native/API/WASM verified; Windows pending"]
+    Windows --> Interaction["AppIntent interaction path<br/>Native/WASM/Windows behavior verified"]
     Board --> Acceptance["Static and interaction acceptance<br/>real host pending"]
     Interaction --> Acceptance
 ```

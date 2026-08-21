@@ -297,21 +297,22 @@ surface, typecheck for macOS 11, iOS 14, watchOS 9, and visionOS 26, and the
 replacement checks pass on the local arm64 macOS host. All 97 focused Native
 tests pass, and the normal WASM API, behavior, and M4 targets build with the
 pinned Swift 6.4 snapshot and accompanying OpenFoundation localized-value
-supplement. The M5
-Windows gate additionally compiles the package test graph on native x64 and
-ARM64 runners. That recorded M5 evidence did not execute the behavior tests on
-Windows. The revised push/pull-request workflow now executes the compiled test
-runner with a ten-minute timeout and resolves OpenFoundation through the pinned
-remote revision, but that revised workflow has not run yet.
+supplement. The M5 Windows gate compiles the package test graph and lets SwiftPM
+execute all 97 package tests on native x64 and ARM64 runners. The same
+push/pull-request workflow resolves OpenFoundation through the pinned remote
+revision, builds the provider and C++/WinRT bridge, and verifies each unsigned
+MSIX and its runtime closure.
 
-The pinned Windows gate passed on the `win25-vs2026` x86_64 runner in
-[GitHub Actions run 32387237114](https://github.com/1amageek/OpenWidgetKit/actions/runs/32387237114)
-at head `9b8386182b32d7ee970d57d8a453223c6386895e`. It compiled both replacement
+The pinned Windows M1 gate passed on the `win25-vs2026` x86_64 runner in
+[GitHub Actions run 32435637477](https://github.com/1amageek/OpenWidgetKit/actions/runs/32435637477)
+at head `fb5bc90c3e2e21bd1e7cb32086bb6023319e3c79`. It compiled both replacement
 fixtures, executed the differential behavior fixture, observed the required
 non-`Sendable` rejection, and recorded the effective Foundation module and
 runtime DLL hashes. The normalized evidence and raw artifact digest are stored
 in `Verification/M1_WINDOWS_EVIDENCE.json`. These checks complete the M1 API
-inventory and compatibility-fixture milestone. The M5 x64/ARM64 build, link,
-runtime-closure, and MSIX evidence is stored in
-`Verification/M5_WINDOWS_EVIDENCE.json`. Neither gate establishes Windows COM
-activation or Widgets Board behavior, which belongs to M6.
+inventory and compatibility-fixture milestone. The M5 x64/ARM64 build, test,
+link, runtime-closure, and MSIX gate passed in
+[GitHub Actions run 32437684734](https://github.com/1amageek/OpenWidgetKit/actions/runs/32437684734),
+with normalized evidence stored in `Verification/M5_WINDOWS_EVIDENCE.json`.
+Neither gate establishes packaged COM activation or Widgets Board behavior,
+which belongs to M6.

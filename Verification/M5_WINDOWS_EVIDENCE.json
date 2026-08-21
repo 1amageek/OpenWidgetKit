@@ -3,9 +3,9 @@
   "verification": {
     "date": "2026-08-21",
     "repository": "1amageek/OpenWidgetKit",
-    "runID": "32387239351",
-    "runURL": "https://github.com/1amageek/OpenWidgetKit/actions/runs/32387239351",
-    "headSHA": "9b8386182b32d7ee970d57d8a453223c6386895e",
+    "runID": "32437684734",
+    "runURL": "https://github.com/1amageek/OpenWidgetKit/actions/runs/32437684734",
+    "headSHA": "9be8e9050a82c8b08b8bbec1615d8a58ebb70492",
     "result": "success"
   },
   "toolchain": {
@@ -32,7 +32,7 @@
       "architecture": "x64",
       "runnerLabel": "windows-2025-vs2026",
       "runnerImage": "win25-vs2026",
-      "runnerImageVersion": "20260818.207.1",
+      "runnerImageVersion": "20260810.198.2",
       "swiftTriple": "x86_64-unknown-windows-msvc",
       "swiftInstallerSHA256": "17D5EBA8DFDC9E99BF13C0F26169022BE2F816B19E66D883A596D3512CFB0A04",
       "runtimeMergeModule": {
@@ -40,8 +40,8 @@
         "sha256": "CB820537D5DB91764366BAD773B3AF36ADBABC964143FD760999F9A16E9C7484"
       },
       "runtimeFileCount": 25,
-      "expandedPackageFileCount": 39,
-      "msixArchiveEntryCount": 40,
+      "expandedPackageFileCount": 37,
+      "msixArchiveEntryCount": 38,
       "foundationDLLs": [
         {
           "name": "Foundation.dll",
@@ -56,11 +56,11 @@
           "sha256": "811213F7569995F6EEC6F1262692ABE428D0A6531F5F2DE33AC3AF5E65B153AB"
         }
       ],
-      "bridgeSHA256": "53CC169811C744C612FF2DEA293909E2DCEBAC2C03CD6674729EB7E40CB7071A",
-      "providerSHA256": "8B59FC63D7F6ADF78DB1BC0F853D0F255D7085E85AB322B3702583503A377567",
-      "msixSHA256": "14F45F16FE19A67BF92B0BE7EF63FC72A954F9C8FEF2982196098E995DDEF8E9",
+      "bridgeSHA256": "A1DABD3FF744217A75E7B521BF884E027140380648847A3C0BC1BA0E3CFE58E6",
+      "providerSHA256": "8B05D200D2EE38A236B5EB8B1B573586D12D12653B617954E6017D222022A1C9",
+      "msixSHA256": "B2D62F21D535C30E54ADAF5056E910EF2049863E46048F49BEB5B1265CB6F6B9",
       "rawArtifactName": "m5-windows-x64",
-      "rawEvidenceFileSHA256": "B339584DF514E32FF028953F860AD0C110919670179C6703413F22CE2560FB4D"
+      "rawEvidenceFileSHA256": "AEE55F64EDB8D58E455872C23F7C6D7121FB5FB76ED694A44919667C528E335D"
     },
     {
       "architecture": "arm64",
@@ -74,8 +74,8 @@
         "sha256": "EBFC7F0F6ED55878D99268CF8ADF224A8A2CFA5254868085B619A862366F9E31"
       },
       "runtimeFileCount": 25,
-      "expandedPackageFileCount": 39,
-      "msixArchiveEntryCount": 40,
+      "expandedPackageFileCount": 37,
+      "msixArchiveEntryCount": 38,
       "foundationDLLs": [
         {
           "name": "Foundation.dll",
@@ -90,14 +90,15 @@
           "sha256": "A3220669379DAE449247D9B6DA090C93167F489F5B127DE69C099EBBDB50CE8C"
         }
       ],
-      "bridgeSHA256": "0584E45464B7B7CADE403ECA00AFF7F758F5B7379E76FEABC31CCEC62061F856",
-      "providerSHA256": "F02AB450ADB3F1FB9A40FEAFAB99A3460FCE98576502D3116A81611F1EF4C7AD",
-      "msixSHA256": "78D5961E3653ACC378BE4426B7F7FE01569925AED22F10A3855077AB9ED62797",
+      "bridgeSHA256": "32242264CA2A313F8721320BE17C2F8F44639CDFA982926EE835B9A2C61D98EB",
+      "providerSHA256": "CC5E37B11D081C8007126A274ABAF8599E3F2F4C0742E6BB019583460656B06A",
+      "msixSHA256": "8997E07669AADC2B38AE2CDD749E4AA3252FE422636956C5A0619ECF682629BF",
       "rawArtifactName": "m5-windows-arm64",
-      "rawEvidenceFileSHA256": "3F049429C3383ACF3DF9B49D7592F131483AC1AB6EA87E9A62256CCA31906BC7"
+      "rawEvidenceFileSHA256": "FFDD086CE37F23CB97CD779F7CD7E44078F67FC1ECD50ACDB4D6F1424223932E"
     }
   ],
   "verifiedContracts": [
+    "All 97 package tests pass under SwiftPM on both x64 and ARM64 Windows runners.",
     "The Swift host triple and Visual Studio host/target architecture match each package architecture.",
     "The Swift provider executable, C++/WinRT bridge, and required Foundation DLLs have the expected PE machine.",
     "The runtime dependency closure is satisfied by the pinned architecture-specific Swift redistributable merge module.",
