@@ -37,6 +37,24 @@ try {
         throw "Unexpected target triple: $($TargetInfo.target.unversionedTriple)"
     }
 
+    $OpenFoundationRoot = Join-Path $RepositoryRoot "..\OpenFoundation"
+    $OpenFoundationBinaryPath = (
+        & swift build --package-path $OpenFoundationRoot --show-bin-path
+    ).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $OpenFoundationBinaryPath) {
+        throw "SwiftPM did not report the OpenFoundation binary directory."
+    }
+    $OpenFoundationLocalizationBundle = Join-Path `
+        $OpenFoundationBinaryPath `
+        "OpenFoundation_OpenFoundationLocalizationSmoke.bundle"
+    & swift run `
+        --package-path $OpenFoundationRoot `
+        OpenFoundationLocalizationSmoke `
+        $OpenFoundationLocalizationBundle | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "The OpenFoundation localized-resource behavior fixture failed."
+    }
+
     & swift build --target OpenWidgetKitAPIFixture | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "The replacement API fixture failed to build."

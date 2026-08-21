@@ -24,7 +24,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/1amageek/OpenFoundation.git",
-            revision: "88ed849f1cf978a4b8af2d71413c38f153606271"
+            revision: "70514cd296acd7832e04d10bfb48a728cb57e6c3"
         )
     ],
     targets: [

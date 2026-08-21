@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: 1amageek/OpenFoundation
-          ref: 88ed849f1cf978a4b8af2d71413c38f153606271
+          ref: 70514cd296acd7832e04d10bfb48a728cb57e6c3
           path: CoreFoundation/OpenFoundation
 
       - name: Check out OpenCoreGraphics
