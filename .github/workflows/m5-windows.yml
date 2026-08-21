@@ -140,10 +140,15 @@ jobs:
               "OpenWidgetWindowsRuntimeTests"
           )
           foreach ($TestTarget in $TestTargets) {
+              $RunnerNames = @(
+                  $TestTarget,
+                  "$TestTarget.exe",
+                  "$TestTarget.xctest"
+              )
               $TestBinaries = @(
                   Get-ChildItem -Path $BinaryPath -File -Recurse |
                       Where-Object {
-                          $_.Name -eq "$TestTarget.exe"
+                          $_.Name -in $RunnerNames
                       }
               )
               if ($TestBinaries.Count -ne 1) {
