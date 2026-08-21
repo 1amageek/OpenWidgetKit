@@ -101,10 +101,22 @@ jobs:
           $SwiftBin = $SwiftExecutable.DirectoryName
           $SwiftTargetInfo = (& $SwiftExecutable.FullName -print-target-info |
               ConvertFrom-Json)
-          $RuntimeLibraryPaths = @($SwiftTargetInfo.paths.runtimeLibraryPaths)
+          $SwiftInstallRoot = Split-Path `
+              (Split-Path $SwiftBin -Parent) -Parent
+          $SwiftCoreLibraries = @(Get-ChildItem `
+              -Path $SwiftInstallRoot -Recurse -Filter swiftCore.dll -File)
+          $RuntimeLibraryCandidates = @(
+              @($SwiftTargetInfo.paths.runtimeLibraryPaths) +
+              @($SwiftCoreLibraries | ForEach-Object { $_.DirectoryName })
+          )
+          $RuntimeLibraryPaths = @(
+              $RuntimeLibraryCandidates |
+                  Where-Object { $_ } | Select-Object -Unique
+          )
           $MissingRuntimeLibraryPaths = @($RuntimeLibraryPaths |
               Where-Object { -not (Test-Path $_) })
-          if ($RuntimeLibraryPaths.Count -eq 0 -or
+          if ($SwiftCoreLibraries.Count -eq 0 -or
+              $RuntimeLibraryPaths.Count -eq 0 -or
               $MissingRuntimeLibraryPaths.Count -ne 0) {
               throw "The Swift runtime library paths are unavailable: $MissingRuntimeLibraryPaths"
           }
